@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>ZX Spectrum BASIC WASM PoC</title>
+    <style>
+        body { background: #111; color: #0f0; font-family: monospace; padding: 20px; }
+        input, button { background: #222; color: #0f0; border: 1px solid #0f0; padding: 5px; font-family: monospace; }
+        #output { margin-top: 20px; white-space: pre-wrap; border-top: 1px dashed #0f0; padding-top: 10px; }
+        .info { color: #888; font-size: 0.9em; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<h1>ZX Spectrum BASIC - Web PoC</h1>
+<p class="info">Retro-modus: Druk op de 'P' toets in een leeg invoerveld voor het <code>PRINT</code> keyword!</p>
+
+<input type="text" id="basicInput" placeholder="Druk op P voor PRINT..." size="40">
+<button onclick="stuurNaarBasic()">Voer uit</button>
+
+<div id="output"></div>
+
+<script>
+    // We registreren de print-functie direct op het globale window-object.
+    // Dit is de meest robuuste manier waar Emscripten niet omheen kan.
+    window.Module = {
+        print: function(text) {
+            document.getElementById('output').innerHTML += text + "\n";
+        },
+        printErr: function(text) {
+            console.error("C-Error: " + text);
+        }
+    };
+
+    // De keydown-listener voor de 'P'
+    var inputField = document.getElementById('basicInput');
+    inputField.addEventListener('keydown', function(event) {
+        if (inputField.value === "") {
+            if (event.key === 'p' || event.key === 'P') {
+                event.preventDefault();
+                inputField.value = "PRINT ";
+            }
+        }
+    });
+
+    function stuurNaarBasic() {
+        var inputTekst = inputField.value;
+
+        // Controleer of de module klaar is voor gebruik
+        if (window.Module && typeof window.Module.ccall === 'function') {
+            window.Module.ccall('run_basic_line', null, ['string'], [inputTekst]);
+        } else {
+            alert("De WASM module is nog niet volledig geladen of is gecrasht. Controleer F12.");
+        }
+
+        inputField.value = "";
+    }
+</script>
+
+<script src="zx_basic.js"></script>
+
+</body>
+</html>

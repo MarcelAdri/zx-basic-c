@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
-project(zx_basic_c C)
+project(zx_basic_c VERSION 1.0.5 LANGUAGES C)
+
+# Vertel CMake dat hij een gegenereerd headerbestand moet maken
+# op basis van onze template 'version.h.in'
+configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h"
+)
+
+# Zorg ervoor dat de compiler de map met het gegenereerde bestand kan vinden
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 # We gebruiken de C11 of C17 standaard (modern genoeg, overal ondersteund)
 set(CMAKE_C_STANDARD 11)
@@ -16,6 +26,9 @@ endif()
 add_executable(zx_basic_c src/main.c
         include/ast.h
         src/ast.c
+        include/machine.h
+        src/machine.c
+        include/errors.h
 )
 
 target_include_directories(zx_basic_c PRIVATE include)

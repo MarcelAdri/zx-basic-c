@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "ast.h"
+#include "version.h"
 
 // Dit zorgt ervoor dat Emscripten-functies beschikbaar zijn als we voor het web compileren
 #ifdef __EMSCRIPTEN__
@@ -17,22 +18,23 @@
 EMSCRIPTEN_KEEPALIVE
 void run_basic_line(const char *source_code) {
     const char *pointer = source_code;
-    Command cmd = from_string(&pointer);
+    Command *cmd;
 
-    switch (cmd.type) {
-        case CMD_ERROR:
-            printf("Fout: %s\n", cmd.data.error_cmd.expression_string);
+    switch (command_from_string(&pointer, cmd)) {
+        case ERR_OK:
+            switch (cmd->type) {
+                case CMD_PRINT:
+                    printf("%s\n", cmd->data.print_cmd.expression_string);
+                    return;
+            }
+        default: {
+            printf("Fout: Onbekend commando\n"); //TODO: generate error strings
             return;
-        case CMD_PRINT:
-            printf("%s\n", cmd.data.print_cmd.expression_string);
-            return;
-        default:
-            printf("Fout: Onbekend commando\n");
-            return;
+        }
     }
 }
 
 int main(void) {
-    printf("ZX Spectrum BASIC WASM Module Geladen. 0.1.4\n");
+    printf("ZX Spectrum BASIC WASM Module Geladen. v%s\n", ZX_BASIC_VERSION);
     return 0;
 }

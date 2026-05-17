@@ -1,0 +1,19 @@
+//
+// Created by Marcel on 17-05-2026.
+//
+
+#ifndef ZX_BASIC_C_ERRORS_H
+#define ZX_BASIC_C_ERRORS_H
+typedef enum {
+    ERR_OK = 0,
+    ERR_SYNTAX_ERROR,
+    ERR_UNDEFINED_VARIABLE,
+    ERR_DIVISION_BY_ZERO,
+    ERR_OUT_OF_RANGE,
+    ERR_UNKNOWN,
+    ERR_MEM_ALLOCATION,
+    ERR_UNKNOWN_COMMAND,
+    ERR_UNCLOSED_QUOTES
+} ZxError;
+
+#endif //ZX_BASIC_C_ERRORS_H

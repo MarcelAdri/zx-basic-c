@@ -6,8 +6,7 @@
 #define ZX_BASIC_C_AST_H
 
 typedef enum {
-    CMD_ERROR,
-    CMD_PRINT
+    CMD_PRINT,
 } CommandType;
 
 typedef struct {
@@ -27,6 +26,8 @@ typedef struct {
     } data;
 } Command;
 
-Command from_string(const char **input);
+#include "errors.h"
+
+ZxError command_from_string(const char **input, Command *out_command);
 
 #endif //ZX_BASIC_C_AST_H

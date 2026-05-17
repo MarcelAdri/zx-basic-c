@@ -1,12 +1,13 @@
 //
 // Created by Marcel on 16-05-2026.
 //
-#include "ast.h"
 #include <string.h>
+#include "ast.h"
+#include "errors.h"
 
-static Command cmd_print(const char **input) {
-    Command command = {0};
-    command.type = CMD_PRINT;
+
+static ZxError cmd_print(const char **input, Command *out_command) {
+    out_command->type = CMD_PRINT;
     *input += 5;
 
     while (**input == ' ') {
@@ -17,46 +18,38 @@ static Command cmd_print(const char **input) {
         size_t len = 0;
         (*input)++;
         while (**input != '"' && **input != '\0' &&
-            len < sizeof(command.data.print_cmd.expression_string) - 1) {
-            command.data.print_cmd.expression_string[len] = **input;
+            len < sizeof(out_command->data.print_cmd.expression_string) - 1) {
+            out_command->data.print_cmd.expression_string[len] = **input;
             len++;
             (*input)++;
             }
 
         if (**input == '"') {
-            command.data.print_cmd.expression_string[len] = '\0';
+            out_command->data.print_cmd.expression_string[len] = '\0';
             (*input)++;
-            return command;
-        } else {
-            command.type = CMD_ERROR;
-            strncpy(command.data.error_cmd.expression_string, "String niet afgesloten!", sizeof(command.data.error_cmd.expression_string) - 1);
-            command.data.error_cmd.expression_string[sizeof(command.data.error_cmd.expression_string) - 1] = '\0';
-            return command;
+            return ERR_OK;
         }
-    } else {
-        command.data.print_cmd.expression_string[0] = '\0';
-        return command;
+        return ERR_UNCLOSED_QUOTES;
     }
+    out_command->data.print_cmd.expression_string[0] = '\0';
+    return ERR_SYNTAX_ERROR;
 }
 
-Command from_string(const char **input) {
-    Command command = {0};
+ZxError command_from_string(const char **input, Command *out_command) {
+    *out_command = (Command){0};
 
     while (**input == ' ') {
         (*input)++;
     }
 
     if (**input == '\0' || **input == '\n') {
-        return command;
+        return ERR_SYNTAX_ERROR;
     }
 
     if (strncmp(*input, "PRINT", 5) == 0) {
-        return cmd_print(input);
-    } else {
-        command.type = CMD_ERROR;
-        strncpy(command.data.error_cmd.expression_string, "Alleen PRINT wordt ondersteund.", sizeof(command.data.error_cmd.expression_string) - 1);
-        command.data.error_cmd.expression_string[sizeof(command.data.error_cmd.expression_string) - 1] = '\0';
-        return command;
+        return cmd_print(input, out_command);
     }
+
+    return ERR_UNKNOWN_COMMAND;
 }
 

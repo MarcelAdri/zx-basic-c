@@ -1,0 +1,7 @@
+#ifndef ZX_BASIC_VERSION_H
+#define ZX_BASIC_VERSION_H
+
+// CMake zal @PROJECT_VERSION@ automatisch vervangen door "0.2.0"
+#define ZX_BASIC_VERSION "@PROJECT_VERSION@"
+
+#endif //ZX_BASIC_VERSION_H

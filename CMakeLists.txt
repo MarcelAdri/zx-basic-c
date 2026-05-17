@@ -13,7 +13,7 @@ else()
 endif()
 
 # Dit definieert onze executable en welke bestanden erbij horen
-add_executable(zx_basic_c main.c
+add_executable(zx_basic_c src/main.c
         include/ast.h
         src/ast.c
 )

@@ -21,8 +21,7 @@
 <div id="output"></div>
 
 <script>
-    // We registreren de print-functie direct op het globale window-object.
-    // Dit is de meest robuuste manier waar Emscripten niet omheen kan.
+    // 1. We registreren de print-functie direct op het globale window-object.
     window.Module = {
         print: function(text) {
             document.getElementById('output').innerHTML += text + "\n";
@@ -32,17 +31,27 @@
         }
     };
 
-    // De keydown-listener voor de 'P'
     var inputField = document.getElementById('basicInput');
+
+    // 2. De keydown-listener voor de 'P' EN de 'Enter'-toets
     inputField.addEventListener('keydown', function(event) {
+        // RETRO-MODUS: Als het veld leeg is en men drukt op P
         if (inputField.value === "") {
             if (event.key === 'p' || event.key === 'P') {
                 event.preventDefault();
                 inputField.value = "PRINT ";
+                return; // Stop hier, we zijn klaar met deze toetsaanslag
             }
+        }
+
+        // COMFORT-MODUS: Als de gebruiker op Enter drukt
+        if (event.key === 'Enter') {
+            event.preventDefault(); // Voorkom dat de browser rare dingen doet (zoals de pagina herladen)
+            stuurNaarBasic();        // Voer direct de BASIC-regel uit!
         }
     });
 
+    // 3. De functie om de knop-actie af te vangen
     function stuurNaarBasic() {
         var inputTekst = inputField.value;
 
@@ -53,7 +62,7 @@
             alert("De WASM module is nog niet volledig geladen of is gecrasht. Controleer F12.");
         }
 
-        inputField.value = "";
+        inputField.value = ""; // Maak het veld weer leeg voor de volgende regel
     }
 </script>
 

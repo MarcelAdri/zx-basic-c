@@ -26,6 +26,8 @@ typedef struct Machine {
     NumericVariable *numeric_vars;
     int numeric_variable_count;
     int numeric_variable_capacity;
+
+    ZxPrintCallback print_callback;
 } Machine;
 
 static void sanitize_variabele_name(char *dest, const char *src, const size_t max_len) {
@@ -116,5 +118,16 @@ void machine_destroy(ZxMachine machine) {
         }
         // Ruim daarna de machine struct zelf op
         free(machine);
+    }
+}
+void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback) {
+    if (machine != NULL) {
+        machine->print_callback = callback;
+    }
+}
+void machine_print_output(ZxMachine machine, const char *text) {
+    // Veiligheidsklep: alleen aanroepen als de UI daadwerkelijk een callback heeft geregistreerd!
+    if (machine != NULL && machine->print_callback != NULL) {
+        machine->print_callback(text); // <--- HIER gebeurt de magie!
     }
 }

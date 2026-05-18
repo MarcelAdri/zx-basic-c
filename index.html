@@ -6,64 +6,122 @@
     <style>
         body { background: #111; color: #0f0; font-family: monospace; padding: 20px; }
         input, button { background: #222; color: #0f0; border: 1px solid #0f0; padding: 5px; font-family: monospace; }
-        #output { margin-top: 20px; white-space: pre-wrap; border-top: 1px dashed #0f0; padding-top: 10px; }
+        #console-output { margin-top: 20px; white-space: pre-wrap; border-top: 1px dashed #0f0; padding-top: 10px; height: 300px; overflow-y: auto; }
         .info { color: #888; font-size: 0.9em; margin-bottom: 10px; }
+        .error { color: #ff5555; }
+        .system { color: #5555ff; }
+        .input { color: #ffff55; }
     </style>
 </head>
 <body>
 
 <h1>ZX Spectrum BASIC - Web PoC</h1>
-<p class="info">Retro-modus: Druk op de 'P' toets in een leeg invoerveld voor het <code>PRINT</code> keyword!</p>
+<p class="info">Retro-modus: Typ je BASIC code hieronder en voer het uit!</p>
 
-<input type="text" id="basicInput" placeholder="Druk op P voor PRINT..." size="40">
-<button onclick="stuurNaarBasic()">Voer uit</button>
+<input type="text" id="basic-input" placeholder="Typ PRINT &quot;Hallo&quot;..." size="40">
+<button onclick="handleExecute()">Voer uit</button>
 
-<div id="output"></div>
+<div id="console-output"></div>
 
 <script>
-    // 1. We registreren de print-functie direct op het globale window-object.
-    window.Module = {
+    // Dit object wordt door Emscripten gebruikt om te communiceren met de WASM-module
+    var Module = {
+        // HIER VANGEN WE PRINTF OP: Alle stdout uit C sturen we direct naar ons HTML scherm!
         print: function(text) {
-            document.getElementById('output').innerHTML += text + "\n";
+            console.log(text);
+            appendOutput(text, "stdout");
         },
         printErr: function(text) {
-            console.error("C-Error: " + text);
+            console.error(text);
+            appendOutput(text, "error");
+        },
+        onRuntimeInitialized: function() {
+            console.log("Emscripten runtime succesvol geïnitialiseerd.");
+            initEmulator();
         }
     };
 
-    var inputField = document.getElementById('basicInput');
+    // We houden de pointer naar onze specifieke ZX Spectrum machine hier globaal bij
+    let spectrumMachinePointer = null;
 
-    // 2. De keydown-listener voor de 'P' EN de 'Enter'-toets
-    inputField.addEventListener('keydown', function(event) {
-        // RETRO-MODUS: Als het veld leeg is en men drukt op P
-        if (inputField.value === "") {
-            if (event.key === 'p' || event.key === 'P') {
-                event.preventDefault();
-                inputField.value = "PRINT ";
-                return; // Stop hier, we zijn klaar met deze toetsaanslag
-            }
+    // Initialiseer de interpreter-status
+    function initEmulator() {
+        if (spectrumMachinePointer !== null) {
+            // Als er al een machine actief was, ruimen we hem eerst op
+            Module.ccall('UI_machine_destroy', null, ['number'], [spectrumMachinePointer]);
+            spectrumMachinePointer = null;
         }
 
-        // COMFORT-MODUS: Als de gebruiker op Enter drukt
-        if (event.key === 'Enter') {
-            event.preventDefault(); // Voorkom dat de browser rare dingen doet (zoals de pagina herladen)
-            stuurNaarBasic();        // Voer direct de BASIC-regel uit!
+        // Maak een gloednieuwe, schone machine-instantie aan in C en bewaar het geheugenadres
+        spectrumMachinePointer = Module.ccall('UI_machine_create', 'number', [], []);
+
+        if (spectrumMachinePointer === 0) {
+            appendOutput("Systeemfout: Kon de virtuele ZX Spectrum machine niet initialiseren.", "error");
+        } else {
+            // Dit bericht zie je zodra de WASM module start
+            appendOutput("ZX Spectrum BASIC interpreter gereed. Typ een commando...", "system");
+        }
+    }
+
+    // Deze functie wordt aangeroepen als de gebruiker op Enter drukt of op de 'Voer uit'-knop klikt
+    function handleExecute() {
+        const inputField = document.getElementById("basic-input");
+        const codeLine = inputField.value.trim();
+
+        if (codeLine === "") return;
+
+        // Toon de invoer van de gebruiker in de console UI
+        appendOutput("> " + codeLine, "input");
+
+        // Controleer of de machine-pointer wel geldig is
+        if (spectrumMachinePointer === 0 || spectrumMachinePointer === null) {
+            appendOutput("Fout: Geen actieve machinecontext beschikbaar.", "error");
+            return;
+        }
+
+        // Roep de C-functie aan. We geven het commando én onze unieke machine-pointer mee!
+        Module.ccall(
+            'run_basic_line',
+            null,
+            ['string', 'number'],
+            [codeLine, spectrumMachinePointer]
+        );
+
+        // Maak het invoerveld weer leeg voor de volgende regel
+        inputField.value = "";
+    }
+
+    // UI-Helper om tekst naar je HTML-scherm/terminal te schrijven
+    function appendOutput(text, className) {
+        const consoleDiv = document.getElementById("console-output");
+        const line = document.createElement("div");
+        line.className = className;
+        line.textContent = text;
+        consoleDiv.appendChild(line);
+
+        // Zorg dat de terminal automatisch naar beneden scrolt bij nieuwe output
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+
+    // Event listener voor de Enter-toets in het invoerveld
+    // Event listener voor sneltoetsen (zoals P voor PRINT) en de Enter-toets
+    document.getElementById("basic-input").addEventListener("keydown", function(event) {
+        const inputField = event.target;
+
+        // RETRO MAGIE: Als het veld nog LEEG is en de gebruiker drukt op 'p' of 'P'
+        if (inputField.value === "" && (event.key === "p" || event.key === "P")) {
+            // Voorkom dat de losse letter 'p' in het vakje getypt wordt
+            event.preventDefault();
+            // Tover direct het hele keyword op het scherm!
+            inputField.value = "PRINT ";
+            return;
+        }
+
+        // Gewone afhandeling voor de Enter-toets
+        if (event.key === "Enter") {
+            handleExecute();
         }
     });
-
-    // 3. De functie om de knop-actie af te vangen
-    function stuurNaarBasic() {
-        var inputTekst = inputField.value;
-
-        // Controleer of de module klaar is voor gebruik
-        if (window.Module && typeof window.Module.ccall === 'function') {
-            window.Module.ccall('run_basic_line', null, ['string'], [inputTekst]);
-        } else {
-            alert("De WASM module is nog niet volledig geladen of is gecrasht. Controleer F12.");
-        }
-
-        inputField.value = ""; // Maak het veld weer leeg voor de volgende regel
-    }
 </script>
 
 <script src="zx_basic.js"></script>

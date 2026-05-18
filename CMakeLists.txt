@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(zx_basic_c VERSION 1.0.5 LANGUAGES C)
+project(zx_basic_c VERSION 1.0.6 LANGUAGES C)
 
 # Vertel CMake dat hij een gegenereerd headerbestand moet maken
 # op basis van onze template 'version.h.in'
@@ -29,6 +29,7 @@ add_executable(zx_basic_c src/main.c
         include/machine.h
         src/machine.c
         include/errors.h
+        src/errors.c
 )
 
 target_include_directories(zx_basic_c PRIVATE include)

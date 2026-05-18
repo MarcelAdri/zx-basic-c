@@ -930,6 +930,19 @@ async function createWasm() {
 
   
 
+  var __abort_js = () =>
+      abort('native code called abort()');
+
+  var abortOnCannotGrowMemory = (requestedSize) => {
+      abort(`Cannot enlarge memory arrays to size ${requestedSize} bytes (OOM). Either (1) compile with -sINITIAL_MEMORY=X with X higher than the current value ${HEAP8.length}, (2) compile with -sALLOW_MEMORY_GROWTH which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with -sABORTING_MALLOC=0`);
+    };
+  var _emscripten_resize_heap = (requestedSize) => {
+      var oldSize = HEAPU8.length;
+      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
+      requestedSize >>>= 0;
+      abortOnCannotGrowMemory(requestedSize);
+    };
+
   var UTF8Decoder = globalThis.TextDecoder && new TextDecoder();
   
   var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
@@ -1326,7 +1339,6 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   'createNamedFunction',
   'zeroMemory',
   'getHeapMax',
-  'abortOnCannotGrowMemory',
   'growMemory',
   'withStackSave',
   'strError',
@@ -1518,6 +1530,7 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'stackAlloc',
   'ptrToString',
   'exitJS',
+  'abortOnCannotGrowMemory',
   'ENV',
   'ERRNO_CODES',
   'DNS',
@@ -1727,6 +1740,8 @@ function checkIncomingModuleAPI() {
 }
 
 // Imports from the Wasm binary.
+var _UI_machine_create = Module['_UI_machine_create'] = makeInvalidEarlyAccess('_UI_machine_create');
+var _UI_machine_destroy = Module['_UI_machine_destroy'] = makeInvalidEarlyAccess('_UI_machine_destroy');
 var _run_basic_line = Module['_run_basic_line'] = makeInvalidEarlyAccess('_run_basic_line');
 var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
 var _fflush = makeInvalidEarlyAccess('_fflush');
@@ -1743,6 +1758,8 @@ var __indirect_function_table = makeInvalidEarlyAccess('__indirect_function_tabl
 var wasmMemory = makeInvalidEarlyAccess('wasmMemory');
 
 function assignWasmExports(wasmExports) {
+  assert(typeof wasmExports['UI_machine_create'] != 'undefined', 'missing Wasm export: UI_machine_create');
+  assert(typeof wasmExports['UI_machine_destroy'] != 'undefined', 'missing Wasm export: UI_machine_destroy');
   assert(typeof wasmExports['run_basic_line'] != 'undefined', 'missing Wasm export: run_basic_line');
   assert(typeof wasmExports['main'] != 'undefined', 'missing Wasm export: main');
   assert(typeof wasmExports['fflush'] != 'undefined', 'missing Wasm export: fflush');
@@ -1756,7 +1773,9 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['emscripten_stack_get_current'] != 'undefined', 'missing Wasm export: emscripten_stack_get_current');
   assert(typeof wasmExports['memory'] != 'undefined', 'missing Wasm export: memory');
   assert(typeof wasmExports['__indirect_function_table'] != 'undefined', 'missing Wasm export: __indirect_function_table');
-  _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 1);
+  _UI_machine_create = Module['_UI_machine_create'] = createExportWrapper('UI_machine_create', 0);
+  _UI_machine_destroy = Module['_UI_machine_destroy'] = createExportWrapper('UI_machine_destroy', 1);
+  _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 2);
   _main = Module['_main'] = createExportWrapper('main', 2);
   _fflush = createExportWrapper('fflush', 1);
   _strerror = createExportWrapper('strerror', 1);
@@ -1772,6 +1791,10 @@ function assignWasmExports(wasmExports) {
 }
 
 var wasmImports = {
+  /** @export */
+  _abort_js: __abort_js,
+  /** @export */
+  emscripten_resize_heap: _emscripten_resize_heap,
   /** @export */
   fd_close: _fd_close,
   /** @export */

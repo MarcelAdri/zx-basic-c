@@ -1,0 +1,11 @@
+# Negeer CLion's build mappen
+cmake-build-debug/
+cmake-build-release/
+.idea/
+
+# Negeer de gegenereerde WebAssembly bestanden
+zx_basic.js
+zx_basic.wasm
+
+# Indien van toepassing, negeer de door CMake gegenereerde versie-header
+cmake-build-debug/generated/

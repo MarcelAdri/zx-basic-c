@@ -5,10 +5,18 @@
 #include "ast.h"
 #include "errors.h"
 #include "machine.h"
+#include "expressions.h"
 
 static ZxError execute_cmd_print(ZxMachine *machine, Command *cmd) {
-    machine_print_output(*machine, cmd->data.print_cmd.expression_string);
-    return ERR_OK;
+    char result[256] = {0};
+    const char *expression = cmd->data.print_cmd.expression_string;
+    ZxError err = solve_expression_to_string(machine,
+        &expression, result, sizeof(result));
+    if (err == ERR_OK) {
+        machine_print_output(*machine, result);
+    }
+
+    return err;
 }
 
 ZxError execute(ZxMachine *machine, const char **input) {

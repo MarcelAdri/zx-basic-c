@@ -5,13 +5,66 @@
 #include "ast.h"
 
 #include <ctype.h>
+#include <stdio.h>
 
 #include "errors.h"
 #include "helpers.h"
 #include "machine.h"
 
+static ZxError cmd_let(const char **input, Command *out_command) {
+    ZxError err;
+    out_command->type = CMD_LET;
+    *input += 3;
+
+    while (**input == ' ') {
+        (*input)++;
+    }
+    err = parse_variable_name(input, out_command->data.cmd_let.var_name);
+    if (err != ERR_OK) {
+        return err;
+    }
+
+    while (**input == ' ') {
+        (*input)++;
+    }
+    if (**input != '=') {
+        return ERR_SYNTAX_ERROR;
+    }
+    (*input)++;
+    while (**input == ' ') {
+        (*input)++;
+    }
+
+    if (**input == '"') {
+        return parse_string_literal_with_quotes(input, out_command->data.cmd_let.expression_string, sizeof(out_command->data.cmd_let.expression_string));
+    }
+
+    if (isalpha(**input)) {
+        char var_name[MAX_VAR_NAME_LEN];
+        err = parse_variable_name(input, var_name);
+        if (err != ERR_OK) {
+            return err;
+        }
+        snprintf(out_command->data.cmd_let.expression_string, sizeof(out_command->data.cmd_let.expression_string), "%s", var_name);
+        return ERR_OK;
+    }
+
+    if (isdigit(**input) || **input == '-') {
+        float value;
+        err = make_float(*input, &value);
+        if (err != ERR_OK) {
+            return err;
+        }
+        snprintf(out_command->data.cmd_let.expression_string, sizeof(out_command->data.cmd_let.expression_string), "%f", value);
+        return ERR_OK;
+    }
+
+    return ERR_INVALID_EXPRESSION;
+
+}
 
 static ZxError cmd_print(const char **input, Command *out_command) {
+    ZxError err;
     out_command->type = CMD_PRINT;
     *input += 5;
 
@@ -20,65 +73,31 @@ static ZxError cmd_print(const char **input, Command *out_command) {
     }
 
     if (**input == '"') {
-        size_t len = 0;
-        out_command->data.print_cmd.expression_string[len] = **input;
-        len++;
-        (*input)++;
-        while (**input != '"' && **input != '\0' &&
-            len < sizeof(out_command->data.print_cmd.expression_string) - 2) {
-            out_command->data.print_cmd.expression_string[len] = **input;
-            len++;
-            (*input)++;
-            }
-
-        if (**input == '"') {
-            out_command->data.print_cmd.expression_string[len] = '\"';
-            out_command->data.print_cmd.expression_string[len + 1] = '\0';
-            (*input) += 2;
-            return ERR_OK;
-        }
-        return ERR_UNCLOSED_QUOTES;
+        return parse_string_literal_with_quotes(input, out_command->data.cmd_print.expression_string, sizeof(out_command->data.cmd_print.expression_string));
     }
 
     if (isalpha(**input)) {
-        const char *second = *input + 1;
-        if (*second == '$') {
-            out_command->data.print_cmd.expression_string[0] = **input;
-            out_command->data.print_cmd.expression_string[1] = '$';
-            out_command->data.print_cmd.expression_string[2] = '\0';
-            (*input) += 3;
-            return ERR_OK;
+        char var_name[MAX_VAR_NAME_LEN];
+        err = parse_variable_name(input, var_name);
+        if (err != ERR_OK) {
+            return err;
         }
-
-        size_t len = 0;
-        while (isalnum(**input) && **input != '\0' && len < sizeof(out_command->data.print_cmd.expression_string) - 1 &&
-            len < MAX_VAR_NAME_LEN - 1) {
-            out_command->data.print_cmd.expression_string[len] = **input;
-            len++;
-            (*input)++;
-        }
-        out_command->data.print_cmd.expression_string[len] = '\0';
+        snprintf(out_command->data.cmd_print.expression_string, sizeof(out_command->data.cmd_print.expression_string), "%s", var_name);
         return ERR_OK;
     }
 
     if (isdigit(**input) || **input == '-') {
-        size_t len = 0;
-        while ((isdigit(**input) || **input == '-' || **input == 'e')
-            && **input != '\0' && len < sizeof(out_command->data.print_cmd.expression_string) - 1 &&
-            len < MAX_VAR_NAME_LEN - 1) {
-            out_command->data.print_cmd.expression_string[len] = **input;
-            len++;
-            (*input)++;
+        float value;
+        err = make_float(*input, &value);
+        if (err != ERR_OK) {
+            return err;
         }
-        out_command->data.print_cmd.expression_string[len] = '\0';
-        if (!is_valid_number(out_command->data.print_cmd.expression_string)) {
-            return ERR_INVALID_EXPRESSION;
-        }
+        snprintf(out_command->data.cmd_print.expression_string, sizeof(out_command->data.cmd_print.expression_string), "%f", value);
         return ERR_OK;
     }
 
 
-    out_command->data.print_cmd.expression_string[0] = '\0';
+    out_command->data.cmd_print.expression_string[0] = '\0';
     return ERR_SYNTAX_ERROR;
 }
 
@@ -95,6 +114,9 @@ ZxError command_from_string(const char **input, Command *out_command) {
 
     if (strncmp(*input, "PRINT", 5) == 0) {
         return cmd_print(input, out_command);
+    }
+    if (strncmp(*input, "LET", 3) == 0) {
+        return cmd_let(input, out_command);
     }
 
     return ERR_UNKNOWN_COMMAND;

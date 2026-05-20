@@ -7,6 +7,6 @@
 #include "errors.h"
 #include "machine.h"
 
-ZxError execute(ZxMachine *machine, const char **input);
+ZxError execute(ZxMachine machine, const char **input);
 
 #endif //ZX_BASIC_C_EXECUTE_H

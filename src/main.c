@@ -42,7 +42,7 @@ void run_basic_line(const char *source_code, ZxMachine machine) {
     Command cmd = {0};
 
     // We geven het adres van cmd mee via de & operator
-    const ZxError error = execute(&machine, &pointer);
+    const ZxError error = execute(machine, &pointer);
     if (error != ERR_OK) {
         char message[256];
         error_message(error, message, sizeof message);

@@ -4,25 +4,28 @@
 
 #ifndef ZX_BASIC_C_AST_H
 #define ZX_BASIC_C_AST_H
+#include "machine.h"
 
 typedef enum {
+    CMD_LET,
     CMD_PRINT,
 } CommandType;
 
 typedef struct {
     char expression_string[256];
-} CommandErrorData;
+} CommandPrint;
 
 typedef struct {
+    char var_name[MAX_VAR_NAME_LEN];
     char expression_string[256];
-} CommandPrintData;
+} CommandLet;
 
 typedef struct {
     int line_number;
     CommandType type;
     union {
-        CommandErrorData error_cmd;
-        CommandPrintData print_cmd;
+        CommandLet cmd_let;
+        CommandPrint cmd_print;
     } data;
 } Command;
 

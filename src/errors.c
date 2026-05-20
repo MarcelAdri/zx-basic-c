@@ -15,6 +15,15 @@ void error_message(const ZxError error, char *message, const size_t message_size
         case ERR_INVALID_EXPRESSION:
             text = "Invalid expression.";
             break;
+        case ERR_INVALID_NUMBER:
+            text = "Invalid number.";
+            break;
+        case ERR_INVALID_STRING_LITERAL:
+            text = "Invalid string literal.";
+            break;
+        case ERR_INVALID_VARIABLE_NAME:
+            text = "Invalid variable name.";
+            break;
         case ERR_MEM_ALLOCATION:
             text = "Problem while allocating.";
             break;

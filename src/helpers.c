@@ -8,6 +8,9 @@
 #include <stdint.h>
 
 #include "helpers.h"
+
+#include <stdio.h>
+
 #include "characters.h"
 #include "errors.h"
 #include "machine.h"
@@ -138,8 +141,7 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
     while (is_zx_space(expression[i]) && i < expression_size) {
         i++;
     }
-
-    if (i == expression_size - 1) {
+    if (i == expression_size) {
         return ERR_SYNTAX_ERROR;
     }
 
@@ -150,17 +152,16 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
             variable_name[2] = '\0';
             return ERR_NOT_IMPLEMENTED; //TODO implement string variables
         }
-
-        size_t len = 0;
-        while ((is_zx_alnum(expression[i]) || is_zx_space(expression[i]))
-            && i < expression_size &&  len < MAX_VAR_NAME_LEN - 1) {
-            variable_name[len] = *get_content_from_token(expression[i]);
-            len++;
-            i++;
-            }
-        variable_name[len] = '\0';
-
-        return ERR_OK;
     }
-    return ERR_INVALID_VARIABLE_NAME;
+    size_t len = 0;
+    while ((is_zx_alnum(expression[i]) || is_zx_space(expression[i]))
+        && i < expression_size) {
+        variable_name[len] = *get_content_from_token(expression[i]);
+        len++;
+        i++;
+    }
+    variable_name[len] = '\0';
+
+    return ERR_OK;
+
 }

@@ -57,6 +57,10 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
 }
 
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) { // Alleen 'PRINT' getypt zonder argumenten
+        machine_print_output(machine, "");
+        return ERR_OK;
+    }
     char result[256] = {0};
     uint8_t expression[output_size - 1];
     memcpy(expression, cmd + 1, output_size - 1);
@@ -79,26 +83,36 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
     uint8_t command[input_size];
     ZxError err;
     while (input_counter <= input_size) {
-        if (input[input_counter] == get_token_from_key(':', KEYMAP_MODE_LITERAL) ||
-            input_counter == input_size) {
-            input_counter++;
-            output_size = output_counter + 1;
-            switch (command[0]) {
-                case 245: //PRINT
-                    err = execute_cmd_print(machine, command, output_size);
-                    break;
-                case 241: //LET
-                    err = execute_cmd_let(machine, command, output_size);
-                    break;
-                default:
-                    return ERR_NOT_IMPLEMENTED;
+        if (input_counter == input_size || input[input_counter] == get_token_from_key(':', KEYMAP_MODE_LITERAL)) {
+
+            output_size = output_counter;
+
+            if (output_size > 0) {
+                switch (command[0]) {
+                    case 245: //PRINT
+                        err = execute_cmd_print(machine, command, output_size);
+                        break;
+                    case 241: //LET
+                        err = execute_cmd_let(machine, command, output_size);
+                        break;
+                    default:
+                        return ERR_NOT_IMPLEMENTED;
+                }
+                if (err != ERR_OK) {
+                    return err;
+                }
             }
-            if (err != ERR_OK) {
-                return err;
-            }
+
             output_counter = 0;
-            output_size = 0;
+
+            if (input_counter == input_size) {
+                break;
+            }
+
+            input_counter++;
+            continue;
         }
+
         command[output_counter] = input[input_counter];
         input_counter++;
         output_counter++;

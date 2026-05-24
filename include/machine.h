@@ -14,8 +14,8 @@ typedef struct Machine* ZxMachine;
 typedef void (*ZxPrintCallback)(const char *text);
 
 ZxMachine machine_create(void);
-ZxError machine_set_numeric(ZxMachine machine, const char *var_name, float value);
-ZxError machine_get_numeric(ZxMachine machine, const char *var_name, float *value);
+ZxError machine_set_numeric(ZxMachine machine, const char *var_name, double value);
+ZxError machine_get_numeric(ZxMachine machine, const char *var_name, double *value);
 void machine_destroy(ZxMachine machine);
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback);
 void machine_print_output(ZxMachine machine, const char *text);

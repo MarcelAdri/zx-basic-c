@@ -13,11 +13,11 @@
 
 typedef struct {
     char name[MAX_VAR_NAME_LEN];       // We reserveren max. 99 tekens voor de naam (+ '\0')
-    float value;
+    double value;
 } NumericVariable;
 
 typedef struct Machine {
-    float loop_counters[26];
+    double loop_counters[26];
     bool loop_counter_defined[26];
 
     char string_variables[26][256];
@@ -76,7 +76,7 @@ ZxMachine machine_create(void) {
     return machine;
 }
 
-ZxError machine_set_numeric(ZxMachine machine, const char *var_name, float value) {
+ZxError machine_set_numeric(ZxMachine machine, const char *var_name, double value) {
     int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
     if (i != NOT_FOUND) {
         machine->numeric_vars[i].value = value;
@@ -101,7 +101,7 @@ ZxError machine_set_numeric(ZxMachine machine, const char *var_name, float value
     return ERR_OK;
 }
 
-ZxError machine_get_numeric(ZxMachine machine, const char *var_name, float *value) {
+ZxError machine_get_numeric(ZxMachine machine, const char *var_name, double *value) {
     int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
     if (i != NOT_FOUND) {
         *value = machine->numeric_vars[i].value;

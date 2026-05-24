@@ -18,7 +18,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     uint8_t expr[256] = {0};
     char var_name[MAX_VAR_NAME_LEN];
     ZxError err;
-    float value;
+    double value;
     size_t name_size = 0;
     size_t expr_size = 0;
     for (size_t i = 1; i < output_size; i++) {
@@ -48,7 +48,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
         return ERR_SYNTAX_ERROR;
     }
 
-    err = solve_expression_to_float(machine,
+    err = solve_expression_to_double(machine,
         expr, expr_size, &value, output_size);
     if (err != ERR_OK) {
         return err;

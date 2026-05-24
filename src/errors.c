@@ -1,9 +1,9 @@
 //
 // Created by Marcel on 18-05-2026.
 //
-#include "errors.h"
 
 #include <stdio.h>
+#include "errors.h"
 
 void error_message(const ZxError error, char *message, const size_t message_size) {
     const char *text;
@@ -12,8 +12,17 @@ void error_message(const ZxError error, char *message, const size_t message_size
         case ERR_DIVISION_BY_ZERO:
             text = "Division by zero.";
             break;
+        case ERR_INVALID_ARGUMENT:
+            text = "Invalid argument.";
+            break;
+        case ERR_INVALID_CHARACTER:
+            text = "Invalid character.";
+            break;
         case ERR_INVALID_EXPRESSION:
             text = "Invalid expression.";
+            break;
+        case ERR_INVALID_FUNCTION_TYPE:
+            text = "Invalid function type.";
             break;
         case ERR_INVALID_NUMBER:
             text = "Invalid number.";
@@ -24,8 +33,14 @@ void error_message(const ZxError error, char *message, const size_t message_size
         case ERR_INVALID_VARIABLE_NAME:
             text = "Invalid variable name.";
             break;
+        case ERR_LONG_SENTENCE:
+            text = "Input is too long.";
+            break;
         case ERR_MEM_ALLOCATION:
             text = "Problem while allocating.";
+            break;
+        case ERR_NOT_IMPLEMENTED:
+            text = "Not implemented.";
             break;
         case ERR_OUT_OF_RANGE:
             text = "Out of range error.";

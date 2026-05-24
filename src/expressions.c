@@ -4,22 +4,29 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdint.h>
 
+#include "expressions.h"
+#include "characters.h"
 #include "errors.h"
 #include "machine.h"
 #include "helpers.h"
 
-ZxError solve_expression_to_float(ZxMachine machine, const char **expression, float *result, const size_t result_size) {
+ZxError solve_expression_to_float(ZxMachine machine, const uint8_t *expression, size_t expression_size, float *result, const size_t result_size) {
     ZxError err;
+    size_t i = 0;
+    while (is_zx_space(expression[i])) {
+        i++;
+    }
 
-    if (**expression == '"') {
+    if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
         return ERR_INVALID_NUMBER;
     }
 
-    if (isalpha(**expression)) {
+    if (is_zx_alpha(expression[i])) {
         char var_name[MAX_VAR_NAME_LEN];
 
-        err = parse_variable_name(expression, var_name);
+        err = parse_variable_name(expression, expression_size, var_name);
         if (err != ERR_OK) {
             return err;
         }
@@ -34,9 +41,9 @@ ZxError solve_expression_to_float(ZxMachine machine, const char **expression, fl
         return ERR_OK;
     }
 
-    if (isdigit(**expression) || **expression == '-') {
+    if (is_zx_number_start_character(expression[i])) {
         float value;
-        err = parse_number_to_float(expression, &value, result_size);
+        err = parse_number_to_float(expression, expression_size, &value, result_size);
         if (err != ERR_OK) {
             return err;
         }
@@ -47,47 +54,65 @@ ZxError solve_expression_to_float(ZxMachine machine, const char **expression, fl
     return ERR_INVALID_NUMBER;
 }
 
-ZxError solve_expression_to_string(ZxMachine machine, const char **expression, char *result, const size_t result_size) {
+ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression, size_t expression_size, char *result, const size_t result_size) {
     ZxError err;
+    bool is_literal = false;
+    bool is_variable = false;
+    bool is_number = false;
 
-    if (**expression == '"') {
-        char text[result_size];
-        err = parse_string_literal(expression, text, result_size);
-        if (err != ERR_OK) {
-            return err;
-        }
-        snprintf(result, result_size, "%s", text);
-        return ERR_OK;
+    size_t i = 0;
+    while (is_zx_space(expression[i]) && i < expression_size) {
+        i++;
     }
 
-
-    if (isalpha(**expression)) {
-        char var_name[MAX_VAR_NAME_LEN];
-
-        err = parse_variable_name(expression, var_name);
+    if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+        return parse_string_literal(expression, expression_size - i, result, result_size);
+    }
+    if (is_zx_alpha(expression[i])) {
+        char variable_name[MAX_VAR_NAME_LEN];
+        err = parse_variable_name(expression, expression_size, variable_name);
         if (err != ERR_OK) {
             return err;
         }
-
         float value;
-
-        err = machine_get_numeric(machine, var_name, &value);
+        err = machine_get_numeric(machine, variable_name, &value);
         if (err != ERR_OK) {
             return err;
         }
         snprintf(result, result_size, "%f", value);
         return ERR_OK;
+
     }
 
-    if (isdigit(**expression) || **expression == '-') {
-        float value;
-        err = parse_number_to_float(expression, &value, result_size);
-        if (err != ERR_OK) {
-            return err;
+    size_t len = 0;
+    for (size_t i = 0; i < expression_size; i++) {
+        if (is_number) {
+            if (len > result_size - 1) {
+                return ERR_INVALID_NUMBER;
+            }
+            if (!is_zx_number_character(expression[i])) {
+                if (len > 0) {
+                    result[len] = '\0';
+                    return make_float(result, NULL);
+                }
+            }
+            result[len] = *get_content_from_token(expression[i]);
+            len++;
+            continue;
         }
-        snprintf(result, result_size, "%f", value);
-        return ERR_OK;
+        if (is_zx_space(expression[i])) {
+            continue;
+        }
+
+        if (is_zx_number_start_character(expression[i])) {
+            is_number = true;
+            result[len] = *get_content_from_token(expression[i]);
+            len++;
+            continue;
+        }
+
     }
 
     return ERR_INVALID_EXPRESSION;
 }
+

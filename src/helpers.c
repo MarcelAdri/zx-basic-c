@@ -5,9 +5,10 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <ctype.h>
-#include <stdio.h>
+#include <stdint.h>
 
+#include "helpers.h"
+#include "characters.h"
 #include "errors.h"
 #include "machine.h"
 
@@ -38,23 +39,20 @@ ZxError make_float(const char *text, float *out_float) {
     }
     return ERR_OK;
 }
-ZxError parse_number_to_string(const char **input, char *number_string, const size_t result_size) {
-    while (**input == ' ') {
-        (*input)++;
+ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size, char *number_string, const size_t result_size) {
+    size_t i = 0;
+    while (is_zx_space(expression[i]) && i < expression_size) {
+        i++;
     }
-    if (isdigit(**input) || **input == '-' || **input == '.' || **input == '+') {
+
+    if (is_zx_number_start_character(expression[i])) {
         size_t len = 0;
-        while ((isdigit(**input) ||
-            **input == '+' ||
-            **input == '-' ||
-            **input == '.' ||
-            **input == 'e' ||
-            **input == 'E') &&
+        while (is_zx_number_character(expression[i]) &&
             len < result_size - 1 &&
-            **input != '\0') {
-            number_string[len] = **input;
+            i < expression_size) {
+            number_string[len] = *get_content_from_token(expression[i]);
             len++;
-            (*input)++;
+            i++;
             }
         if (len > 0) {
             number_string[len] = '\0';
@@ -65,10 +63,10 @@ ZxError parse_number_to_string(const char **input, char *number_string, const si
     return ERR_INVALID_EXPRESSION;
 }
 
-ZxError parse_number_to_float(const char **input, float *number, const size_t result_size) {
+ZxError parse_number_to_float(const uint8_t *expression, size_t expression_size, float *number, const size_t result_size) {
     char number_string[result_size];
 
-    const ZxError err = parse_number_to_string(input, number_string, result_size);
+    const ZxError err = parse_number_to_string(expression, expression_size, number_string, result_size);
     if (err != ERR_OK) {
         return err;
     }
@@ -76,31 +74,37 @@ ZxError parse_number_to_float(const char **input, float *number, const size_t re
     return make_float(number_string, number);
 }
 
-ZxError parse_string_literal(const char **input, char *literal, const size_t result_size) {
-    while (**input == ' ') {
-        (*input)++;
-    }
-    if (**input == '"') {
-        size_t len = 0;
-        (*input)++;
-        while (**input != '"' && **input != '\0' &&
-            len < result_size - 1) {
-            literal[len] = **input;
-            len++;
-            (*input)++;
-            }
+ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, char *literal, const size_t result_size) {
 
-        if (**input == '"') {
+    size_t i = 0;
+    while (is_zx_space(expression[i]) && i < expression_size) {
+        i++;
+    }
+
+    if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+        size_t len = 0;
+        i++;
+        while (expression[i] != get_token_from_key('"', KEYMAP_MODE_LITERAL) &&
+            len < result_size - 1 &&
+            i < expression_size) {
+            if (!is_zx_printable_character(expression[i])) {
+                return ERR_INVALID_STRING_LITERAL;
+            }
+            literal[len] = *get_content_from_token(expression[i]);
+            len++;
+            i++;
+        }
+
+        if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
             literal[len] = '\0';
-            (*input)++;
             return ERR_OK;
         }
         return ERR_UNCLOSED_QUOTES;
     }
     return ERR_INVALID_STRING_LITERAL;
 }
-ZxError parse_string_literal_with_quotes(const char **input, char *literal, const size_t result_size) {
-    const ZxError err = parse_string_literal(input, literal, result_size);
+ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expression_size, char *literal, const size_t result_size) {
+    const ZxError err = parse_string_literal(expression, expression_size, literal, result_size);
     if (err != ERR_OK) {
         return err;
     }
@@ -129,31 +133,30 @@ ZxError parse_string_literal_with_quotes(const char **input, char *literal, cons
     return ERR_OK;
 }
 
-ZxError parse_variable_name(const char **input, char *variable_name) {
-    while (**input == ' ') {
-        (*input)++;
+ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, char *variable_name) {
+    size_t i = 0;
+    while (is_zx_space(expression[i]) && i < expression_size) {
+        i++;
     }
 
-    if (**input == '\0') {
+    if (i == expression_size - 1) {
         return ERR_SYNTAX_ERROR;
     }
 
-    if (isalpha(**input)) {
-        const char *second = *input + 1;
-        if (*second == '$') {
-            variable_name[0] = **input;
+    if (is_zx_alpha(expression[i]) && i < expression_size - 1) {
+        if (expression[i+1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+            variable_name[0] = *get_content_from_token(expression[i]);
             variable_name[1] = '$';
             variable_name[2] = '\0';
-            (*input) += 3;
-            return ERR_INVALID_VARIABLE_NAME; //TODO implement string variables
+            return ERR_NOT_IMPLEMENTED; //TODO implement string variables
         }
 
         size_t len = 0;
-        while ((isalnum(**input) || isspace(**input))
-            && **input != '\0' &&  len < MAX_VAR_NAME_LEN - 1) {
-            variable_name[len] = **input;
+        while ((is_zx_alnum(expression[i]) || is_zx_space(expression[i]))
+            && i < expression_size &&  len < MAX_VAR_NAME_LEN - 1) {
+            variable_name[len] = *get_content_from_token(expression[i]);
             len++;
-            (*input)++;
+            i++;
             }
         variable_name[len] = '\0';
 

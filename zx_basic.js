@@ -274,13 +274,6 @@ function assert(condition, text) {
 
 // We used to include malloc/free by default in the past. Show a helpful error in
 // builds with assertions.
-function _malloc() {
-  abort('malloc() called but not included in the build - add `_malloc` to EXPORTED_FUNCTIONS');
-}
-function _free() {
-  // Show a helpful error since we used to include free by default in the past.
-  abort('free() called but not included in the build - add `_free` to EXPORTED_FUNCTIONS');
-}
 
 /**
  * Indicates whether filename is delivered via file protocol (as opposed to http/https)
@@ -469,7 +462,7 @@ function updateMemoryViews() {
   var b = wasmMemory.buffer;
   HEAP8 = new Int8Array(b);
   HEAP16 = new Int16Array(b);
-  HEAPU8 = new Uint8Array(b);
+  Module['HEAPU8'] = HEAPU8 = new Uint8Array(b);
   HEAPU16 = new Uint16Array(b);
   HEAP32 = new Int32Array(b);
   HEAPU32 = new Uint32Array(b);
@@ -1272,6 +1265,7 @@ async function createWasm() {
       ret = onDone(ret);
       return ret;
     };
+
 // End JS library code
 
 // include: postlibrary.js
@@ -1516,7 +1510,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'INT53_MIN',
   'bigintToI53Checked',
   'HEAP8',
-  'HEAPU8',
   'HEAP16',
   'HEAPU16',
   'HEAP32',
@@ -1740,8 +1733,14 @@ function checkIncomingModuleAPI() {
 }
 
 // Imports from the Wasm binary.
+var _malloc = Module['_malloc'] = makeInvalidEarlyAccess('_malloc');
+var _free = Module['_free'] = makeInvalidEarlyAccess('_free');
 var _UI_machine_create = Module['_UI_machine_create'] = makeInvalidEarlyAccess('_UI_machine_create');
 var _UI_machine_destroy = Module['_UI_machine_destroy'] = makeInvalidEarlyAccess('_UI_machine_destroy');
+var _UI_translate_keypress = Module['_UI_translate_keypress'] = makeInvalidEarlyAccess('_UI_translate_keypress');
+var _UI_get_keyword_for_token = Module['_UI_get_keyword_for_token'] = makeInvalidEarlyAccess('_UI_get_keyword_for_token');
+var _UI_format_zx_line = Module['_UI_format_zx_line'] = makeInvalidEarlyAccess('_UI_format_zx_line');
+var _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = makeInvalidEarlyAccess('_UI_get_cursor_mode');
 var _run_basic_line = Module['_run_basic_line'] = makeInvalidEarlyAccess('_run_basic_line');
 var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
 var _fflush = makeInvalidEarlyAccess('_fflush');
@@ -1758,8 +1757,14 @@ var __indirect_function_table = makeInvalidEarlyAccess('__indirect_function_tabl
 var wasmMemory = makeInvalidEarlyAccess('wasmMemory');
 
 function assignWasmExports(wasmExports) {
+  assert(typeof wasmExports['malloc'] != 'undefined', 'missing Wasm export: malloc');
+  assert(typeof wasmExports['free'] != 'undefined', 'missing Wasm export: free');
   assert(typeof wasmExports['UI_machine_create'] != 'undefined', 'missing Wasm export: UI_machine_create');
   assert(typeof wasmExports['UI_machine_destroy'] != 'undefined', 'missing Wasm export: UI_machine_destroy');
+  assert(typeof wasmExports['UI_translate_keypress'] != 'undefined', 'missing Wasm export: UI_translate_keypress');
+  assert(typeof wasmExports['UI_get_keyword_for_token'] != 'undefined', 'missing Wasm export: UI_get_keyword_for_token');
+  assert(typeof wasmExports['UI_format_zx_line'] != 'undefined', 'missing Wasm export: UI_format_zx_line');
+  assert(typeof wasmExports['UI_get_cursor_mode'] != 'undefined', 'missing Wasm export: UI_get_cursor_mode');
   assert(typeof wasmExports['run_basic_line'] != 'undefined', 'missing Wasm export: run_basic_line');
   assert(typeof wasmExports['main'] != 'undefined', 'missing Wasm export: main');
   assert(typeof wasmExports['fflush'] != 'undefined', 'missing Wasm export: fflush');
@@ -1773,9 +1778,15 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['emscripten_stack_get_current'] != 'undefined', 'missing Wasm export: emscripten_stack_get_current');
   assert(typeof wasmExports['memory'] != 'undefined', 'missing Wasm export: memory');
   assert(typeof wasmExports['__indirect_function_table'] != 'undefined', 'missing Wasm export: __indirect_function_table');
+  _malloc = Module['_malloc'] = createExportWrapper('malloc', 1);
+  _free = Module['_free'] = createExportWrapper('free', 1);
   _UI_machine_create = Module['_UI_machine_create'] = createExportWrapper('UI_machine_create', 0);
   _UI_machine_destroy = Module['_UI_machine_destroy'] = createExportWrapper('UI_machine_destroy', 1);
-  _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 2);
+  _UI_translate_keypress = Module['_UI_translate_keypress'] = createExportWrapper('UI_translate_keypress', 2);
+  _UI_get_keyword_for_token = Module['_UI_get_keyword_for_token'] = createExportWrapper('UI_get_keyword_for_token', 1);
+  _UI_format_zx_line = Module['_UI_format_zx_line'] = createExportWrapper('UI_format_zx_line', 2);
+  _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = createExportWrapper('UI_get_cursor_mode', 2);
+  _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 3);
   _main = Module['_main'] = createExportWrapper('main', 2);
   _fflush = createExportWrapper('fflush', 1);
   _strerror = createExportWrapper('strerror', 1);

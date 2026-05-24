@@ -2,48 +2,108 @@
 // Created by Marcel on 18-05-2026.
 //
 
-#include "ast.h"
+#include <stdint.h>
+#include <string.h>
+#include "execute.h"
 #include "errors.h"
 #include "machine.h"
 #include "expressions.h"
+#include "characters.h"
+#include "helpers.h"
 
-static ZxError execute_cmd_let(ZxMachine machine, Command *cmd) {
+static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    bool in_variable_name = true;
+    bool in_expression = false;
+    uint8_t variable_name[MAX_VAR_NAME_LEN] = {0};
+    uint8_t expr[256] = {0};
+    char var_name[MAX_VAR_NAME_LEN];
+    ZxError err;
     float value;
-    const char *name = cmd->data.cmd_let.var_name;
-    const char *expression = cmd->data.cmd_let.expression_string;
-    const ZxError err = solve_expression_to_float(machine,
-        &expression, &value, sizeof(cmd->data.cmd_let.expression_string));
+    size_t name_size = 0;
+    size_t expr_size = 0;
+    for (size_t i = 1; i < output_size; i++) {
+        if (in_variable_name && name_size < MAX_VAR_NAME_LEN - 1) {
+            if (cmd[i] == get_token_from_key('=', KEYMAP_MODE_LITERAL)) {
+                in_variable_name = false;
+                in_expression = true;
+                err = parse_variable_name(variable_name, output_size, var_name);
+                if (err != ERR_OK) {
+                    return err;
+                }
+                continue;
+            }
+            if (is_zx_alnum(cmd[i]) || is_zx_space(cmd[i])) {
+                variable_name[name_size] = cmd[i];
+                name_size++;
+                continue;
+            }
+            return ERR_INVALID_VARIABLE_NAME;
+        }
+        if (in_expression && expr_size < sizeof(expr) - 1) {
+            expr[expr_size] = cmd[i];
+            expr_size++;
+        }
+    }
+    if (in_variable_name) {
+        return ERR_SYNTAX_ERROR;
+    }
+
+    err = solve_expression_to_float(machine,
+        expr, expr_size, &value, output_size);
     if (err != ERR_OK) {
         return err;
     }
-    return machine_set_numeric(machine, name, value);
+    return machine_set_numeric(machine, var_name, value);
 }
 
-static ZxError execute_cmd_print(ZxMachine machine, Command *cmd) {
+static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     char result[256] = {0};
-    const char *expression = cmd->data.cmd_print.expression_string;
+    uint8_t expression[output_size - 1];
+    memcpy(expression, cmd + 1, output_size - 1);
+
     const ZxError err = solve_expression_to_string(machine,
-        &expression, result, sizeof(result));
+         expression, sizeof(expression), result, sizeof(result));
     if (err == ERR_OK) {
         machine_print_output(machine, result);
     }
-
     return err;
 }
 
-ZxError execute(ZxMachine machine, const char **input) {
-    Command cmd = {0};
-    const ZxError error = command_from_string(input, &cmd);
-    if (error != ERR_OK) {
-        return error;
+ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size) {
+    if (machine == NULL || input == NULL || input_size == 0) {
+        return ERR_INVALID_ARGUMENT;
     }
-    switch (cmd.type) {
-        case CMD_LET:
-            return execute_cmd_let(machine, &cmd);
-        case CMD_PRINT:
-            return execute_cmd_print(machine, &cmd);
+    size_t output_size = 0;
+    size_t output_counter = 0;
+    size_t input_counter = 0;
+    uint8_t command[input_size];
+    ZxError err;
+    while (input_counter <= input_size) {
+        if (input[input_counter] == get_token_from_key(':', KEYMAP_MODE_LITERAL) ||
+            input_counter == input_size) {
+            input_counter++;
+            output_size = output_counter + 1;
+            switch (command[0]) {
+                case 245: //PRINT
+                    err = execute_cmd_print(machine, command, output_size);
+                    break;
+                case 241: //LET
+                    err = execute_cmd_let(machine, command, output_size);
+                    break;
+                default:
+                    return ERR_NOT_IMPLEMENTED;
+            }
+            if (err != ERR_OK) {
+                return err;
+            }
+            output_counter = 0;
+            output_size = 0;
+        }
+        command[output_counter] = input[input_counter];
+        input_counter++;
+        output_counter++;
     }
 
-    return ERR_UNKNOWN_COMMAND;
+    return ERR_OK;
 }
 

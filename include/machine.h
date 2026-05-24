@@ -7,6 +7,8 @@
 #include "errors.h"
 
 #define MAX_VAR_NAME_LEN 100
+#define MAX_TEXT_SENTENCE_LEN 256
+#define MAX_TOKEN_SENTENCE_LEN 200
 
 typedef struct Machine* ZxMachine;
 typedef void (*ZxPrintCallback)(const char *text);

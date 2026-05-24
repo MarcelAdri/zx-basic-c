@@ -2,128 +2,304 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>ZX Spectrum BASIC WASM PoC</title>
+    <title>ZX Spectrum BASIC Emulator</title>
     <style>
-        body { background: #111; color: #0f0; font-family: monospace; padding: 20px; }
-        input, button { background: #222; color: #0f0; border: 1px solid #0f0; padding: 5px; font-family: monospace; }
-        #console-output { margin-top: 20px; white-space: pre-wrap; border-top: 1px dashed #0f0; padding-top: 10px; height: 300px; overflow-y: auto; }
-        .info { color: #888; font-size: 0.9em; margin-bottom: 10px; }
-        .error { color: #ff5555; }
-        .system { color: #5555ff; }
-        .input { color: #ffff55; }
+        body { background: #222; color: #fff; font-family: sans-serif; padding: 20px; display: flex; gap: 20px; }
+
+        /* Terminal Styling */
+        #emulator-container { flex: 1; max-width: 600px; }
+        #console-output { background: #000; color: #0f0; font-family: monospace; height: 300px; padding: 10px; overflow-y: auto; border: 4px solid #555; }
+        #input-line { background: #000; color: #0f0; font-family: monospace; padding: 10px; border: 4px solid #555; border-top: none; font-size: 16px; display: flex; }
+        #cursor { background: #f00; color: #fff; width: 14px; text-align: center; font-weight: bold; animation: blink 1s step-end infinite; margin-left: 5px; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* Grafisch Toetsenbord Styling */
+        #keyboard-container { flex: 1; background: #111; padding: 20px; border-radius: 10px; border: 2px solid #444; }
+        .zx-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; }
+
+        /* De wrapper houdt de tekst boven, de toets zelf, en de tekst eronder bij elkaar */
+        .zx-key-wrapper { display: flex; flex-direction: column; align-items: center; width: 54px; }
+
+        /* Tekst op de behuizing (Boven en Onder) */
+        .kw-above { color: #5f5; font-size: 10px; font-weight: bold; height: 14px; margin-bottom: 2px; } /* CTRL-F */
+        .kw-below { color: #f55; font-size: 10px; font-weight: bold; height: 14px; margin-top: 4px; }  /* CTRL-G */
+
+        /* De fysieke rubberen toets */
+        .zx-key {
+            background: #2a2a2a;
+            width: 100%;
+            height: 48px;
+            border-radius: 4px;
+            border-bottom: 4px solid #000;
+            border-right: 2px solid #000;
+            position: relative;
+            font-family: monospace;
+            box-sizing: border-box;
+        }
+
+        /* Tekst OP de toets */
+        .kw-main { color: #ddd; position: absolute; top: 4px; left: 6px; font-size: 16px; font-weight: bold; } /* Standaard / L */
+        .kw-red-on { color: #f55; position: absolute; top: 4px; right: 4px; font-size: 11px; font-weight: bold; } /* CTRL-L */
+        .kw-white { color: #fff; position: absolute; bottom: 4px; left: 4px; font-size: 9px; font-weight: bold; letter-spacing: -0.5px; } /* K Modus */
+        .help-text { color: #aaa; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+        kbd { background: #444; padding: 2px 6px; border-radius: 4px; color: #fff; }
     </style>
 </head>
 <body>
 
-<h1>ZX Spectrum BASIC - Web PoC</h1>
-<p class="info">Retro-modus: Typ je BASIC code hieronder en voer het uit!</p>
+<div id="emulator-container">
+    <h1 style="color: #ccc;">ZX Spectrum Emulator</h1>
+    <div id="console-output"></div>
+    <div id="input-line">
+        <span id="typed-text"></span>
+        <div id="cursor">K</div>
+    </div>
+</div>
 
-<input type="text" id="basic-input" placeholder="Typ PRINT &quot;Hallo&quot;..." size="40">
-<button onclick="handleExecute()">Voer uit</button>
-
-<div id="console-output"></div>
+<div id="keyboard-container">
+    <h2>Invoerhulp (Toetsenbord)</h2>
+    <div class="help-text">
+        De Spectrum gebruikt speciale invoermodi:<br>
+        <kbd>Keyword (eerste aanslag, later met CTRL + K</kbd> : <strong>[K]</strong> (Commando's, bijv. P = PRINT)<br>
+        <kbd>Lettterlijke invoer</kbd> : <strong>[L]</strong> (Letters en cijfers, midden in een zin)<br>
+        <kbd>CTRL + F</kbd> : <strong>[F]</strong> (Groene functies boven de toest, bijv. Q = SIN)<br>
+        <kbd>CTRL + L</kbd> : <strong>[E]</strong> (Rode symbolen op de toets, bijv. W = &lt;&gt;)<br>
+        <kbd>CTRL + G</kbd> : <strong>[E]</strong> (Rode symbolen onder de toets, bijv. W = ACS)<br>
+        <em>Typ om te testen. Druk op Enter om de bytes naar C te sturen!</em>
+    </div>
+    <div id="zx-keyboard"></div>
+</div>
 
 <script>
-    // Dit object wordt door Emscripten gebruikt om te communiceren met de WASM-module
+    // --- 1. HET GRAFISCHE TOETSENBORD GENEREREN ---
+
+    const keyboardLayout = [
+        // Rij 1: Cijfers
+        [
+            { main: '1', white: 'EDIT', above: '', below: 'DEF FN', onRed: '!' },
+            { main: '2', white: 'CAPS LOCK', above: '', below: 'FN', onRed: '@' },
+            { main: '3', white: 'TRUE VID', above: '', below: 'LINE', onRed: '#' },
+            { main: '4', white: 'INV VID', above: '', below: 'OPEN#', onRed: '$' },
+            { main: '5', white: 'LEFT', above: '', below: 'CLOSE#', onRed: '%' },
+            { main: '6', white: 'DOWN', above: '', below: 'MOVE', onRed: '&' },
+            { main: '7', white: 'UP', above: '', below: 'ERASE', onRed: "'" },
+            { main: '8', white: 'RIGHT', above: '', below: 'POINT', onRed: '(' },
+            { main: '9', white: 'GRAPH', above: '', below: 'CAT', onRed: ')' },
+            { main: '0', white: 'DELETE', above: '', below: 'FORMAT', onRed: '_' }
+        ],
+        // Rij 2: QWERTY
+        // Rij 2: QWERTY
+        [
+            { main: 'Q', white: 'PLOT', above: 'SIN', onRed: '<=', below: 'ASN' },
+            { main: 'W', white: 'DRAW', above: 'COS', onRed: '<>', below: 'ACS' },
+            { main: 'E', white: 'REM', above: 'TAN', onRed: '>=', below: 'ATN' },
+            { main: 'R', white: 'RUN', above: 'INT', onRed: '<', below: 'VERIFY' },
+            { main: 'T', white: 'RAND', above: 'RND', onRed: '>', below: 'MERGE' },
+            { main: 'Y', white: 'RETURN', above: 'STR$', onRed: 'AND', below: '[' },
+            { main: 'U', white: 'IF', above: 'CHR$', onRed: 'OR', below: ']' },
+            { main: 'I', white: 'INPUT', above: 'CODE', onRed: 'AT', below: 'IN' },
+            { main: 'O', white: 'POKE', above: 'PEEK', onRed: ';', below: 'OUT' },
+            { main: 'P', white: 'PRINT', above: 'TAB', onRed: '"', below: '©' }
+        ],
+        // Rij 3: ASDFG
+        [
+            { main: 'A', white: 'NEW', above: 'READ', onRed: 'STOP', below: '~' },
+            { main: 'S', white: 'SAVE', above: 'REST', onRed: 'NOT', below: '!' },
+            { main: 'D', white: 'DIM', above: 'DATA', onRed: 'STEP', below: '\\' },
+            { main: 'F', white: 'FOR', above: 'SGN', onRed: 'TO', below: '{' },
+            { main: 'G', white: 'GOTO', above: 'ABS', onRed: 'THEN', below: '}' },
+            { main: 'H', white: 'GOSUB', above: 'SQR', onRed: '↑', below: 'CIRCLE' },
+            { main: 'J', white: 'LOAD', above: 'VAL', onRed: '-', below: 'VAL$' },
+            { main: 'K', white: 'LIST', above: 'LEN', onRed: '+', below: 'SCREEN$' },
+            { main: 'L', white: 'LET', above: 'USR', onRed: '=', below: 'ATTR' },
+            { main: 'ENTER', white: '', above: '', onRed: '', below: '' }
+        ],
+        // Rij 4: ZXCVB
+        [
+            { main: 'SHIFT', white: '', above: '', onRed: '', below: '' },
+            { main: 'Z', white: 'COPY', above: 'LN', onRed: ':', below: 'BEEP' },
+            { main: 'X', white: 'CLEAR', above: 'EXP', onRed: '£', below: 'INK' },
+            { main: 'C', white: 'CONT', above: 'L PRINT', onRed: '?', below: 'PAPER' },
+            { main: 'V', white: 'CLS', above: 'LLIST', onRed: '/', below: 'FLASH' },
+            { main: 'B', white: 'BORDER', above: 'BIN', onRed: '*', below: 'BRIGHT' },
+            { main: 'N', white: 'NEXT', above: 'IN KEY$', onRed: ',', below: 'OVER' },
+            { main: 'M', white: 'PAUSE', above: 'PI', onRed: '.', below: 'INVERSE' },
+            { main: 'SPACE', white: '', above: '', onRed: '', below: '' }
+        ]
+    ];
+
+    const kbContainer = document.getElementById('zx-keyboard');
+    keyboardLayout.forEach(row => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'zx-row';
+        row.forEach(key => {
+            // We bouwen nu de wrapper met tekst erboven en eronder!
+            rowDiv.innerHTML += `
+                <div class="zx-key-wrapper">
+                    <div class="kw-above">${key.above || ''}</div>
+                    <div class="zx-key">
+                        <div class="kw-red-on">${key.onRed || ''}</div>
+                        <div class="kw-white">${key.white || ''}</div>
+                        <div class="kw-main">${key.main}</div>
+                    </div>
+                    <div class="kw-below">${key.below || ''}</div>
+                </div>`;
+        });
+        kbContainer.appendChild(rowDiv);
+    });
+
+    // --- 2. DE EMULATOR LOGICA ---
+    let spectrumMachinePointer = null;
+    let inputBytes = []; // Onze buffer voor de ruwe uint8_t waarden
+    let cursorMode = 'K'; // Start altijd in Keyword modus
+
     var Module = {
-        // HIER VANGEN WE PRINTF OP: Alle stdout uit C sturen we direct naar ons HTML scherm!
-        print: function(text) {
-            console.log(text);
-            appendOutput(text, "stdout");
-        },
-        printErr: function(text) {
-            console.error(text);
-            appendOutput(text, "error");
-        },
-        onRuntimeInitialized: function() {
-            console.log("Emscripten runtime succesvol geïnitialiseerd.");
-            initEmulator();
-        }
+        print: function(text) { appendOutput(text, "stdout"); },
+        printErr: function(text) { appendOutput(text, "error"); },
+        onRuntimeInitialized: function() { initEmulator(); }
     };
 
-    // We houden de pointer naar onze specifieke ZX Spectrum machine hier globaal bij
-    let spectrumMachinePointer = null;
-
-    // Initialiseer de interpreter-status
     function initEmulator() {
-        if (spectrumMachinePointer !== null) {
-            // Als er al een machine actief was, ruimen we hem eerst op
-            Module.ccall('UI_machine_destroy', null, ['number'], [spectrumMachinePointer]);
-            spectrumMachinePointer = null;
-        }
-
-        // Maak een gloednieuwe, schone machine-instantie aan in C en bewaar het geheugenadres
         spectrumMachinePointer = Module.ccall('UI_machine_create', 'number', [], []);
-
-        if (spectrumMachinePointer === 0) {
-            appendOutput("Systeemfout: Kon de virtuele ZX Spectrum machine niet initialiseren.", "error");
-        } else {
-            // Dit bericht zie je zodra de WASM module start
-            appendOutput("ZX Spectrum BASIC interpreter gereed. Typ een commando...", "system");
-        }
+        appendOutput("ZX Spectrum gereed.", "stdout");
+        updateDisplay();
     }
 
-    // Deze functie wordt aangeroepen als de gebruiker op Enter drukt of op de 'Voer uit'-knop klikt
-    function handleExecute() {
-        const inputField = document.getElementById("basic-input");
-        const codeLine = inputField.value.trim();
-
-        if (codeLine === "") return;
-
-        // Toon de invoer van de gebruiker in de console UI
-        appendOutput("> " + codeLine, "input");
-
-        // Controleer of de machine-pointer wel geldig is
-        if (spectrumMachinePointer === 0 || spectrumMachinePointer === null) {
-            appendOutput("Fout: Geen actieve machinecontext beschikbaar.", "error");
+    // --- 3. TOETSENBORD VANGER (Veilige Versie) ---
+    document.addEventListener("keydown", function(event) {
+        if (event.ctrlKey && ['f', 'l', 'g', 'k'].includes(event.key.toLowerCase())) {
+            event.preventDefault();
+            if (event.key.toLowerCase() === 'f') setMode('F');
+            if (event.key.toLowerCase() === 'l') setMode('E');
+            if (event.key.toLowerCase() === 'g') setMode('G');
+            if (event.key.toLowerCase() === 'k') setMode('K');
             return;
         }
 
-        // Roep de C-functie aan. We geven het commando én onze unieke machine-pointer mee!
+        if (event.key === "Backspace") {
+            inputBytes.pop();
+            autoSetCursor();
+            updateDisplay();
+            return;
+        }
+
+        if (event.key === "Enter") {
+            executeBuffer();
+            return;
+        }
+
+        if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
+            // JS is nu "dom" en vraagt het uitsluitend aan C
+            const token = Module.ccall(
+                'UI_translate_keypress',
+                'number',
+                ['number', 'number'],
+                [event.key.charCodeAt(0), cursorMode.charCodeAt(0)]
+            );
+
+            // GEEN JS-MAGIC MEER: We doen alleen iets als C het teken kent
+            if (token !== -1) {
+                inputBytes.push(token);
+                autoSetCursor();
+                updateDisplay();
+            }
+        }
+    });
+
+    function getFormattedLine(byteArray) {
+        if (byteArray.length === 0) return "";
+
+        // Reserveer geheugen en kopieer de array (net als bij run_basic_line)
+        const bufferPtr = Module._malloc(byteArray.length);
+        Module.HEAPU8.set(byteArray, bufferPtr);
+
+        // Vraag C om de bytes om te toveren tot een leesbare string
+        const formattedString = Module.ccall(
+            'UI_format_zx_line',
+            'string',
+            ['number', 'number'],
+            [bufferPtr, byteArray.length]
+        );
+
+        Module._free(bufferPtr);
+        return formattedString;
+    }
+
+    function setMode(mode) {
+        cursorMode = mode;
+        document.getElementById("cursor").innerText = mode;
+    }
+
+    // --- 4. VISUALISATIE VAN DE BYTES ---
+    // --- VISUALISATIE VAN DE BYTES ---
+    function updateDisplay() {
+        // We laten C nu het zware werk doen!
+        const displayText = getFormattedLine(inputBytes);
+        document.getElementById("typed-text").innerText = displayText;
+    }
+
+    // --- SLIMME CURSOR VIA C ---
+    function autoSetCursor() {
+        if (inputBytes.length === 0) {
+            setMode('K');
+            return;
+        }
+
+        // Reserveer geheugen en kopieer de huidige invoer
+        const bufferPtr = Module._malloc(inputBytes.length);
+        Module.HEAPU8.set(inputBytes, bufferPtr);
+
+        // Vraag C om de verwachte cursor modus!
+        // C geeft een 'char' terug. Emscripten vertaalt dit naar een getal (ASCII).
+        const modeAscii = Module.ccall(
+            'UI_get_cursor_mode',
+            'number',
+            ['number', 'number'],
+            [bufferPtr, inputBytes.length]
+        );
+
+        Module._free(bufferPtr);
+
+        // Vertaal het ASCII-getal (bijv. 75) terug naar een letter ('K') en zet de modus
+        setMode(String.fromCharCode(modeAscii));
+    }
+
+    // --- DE WASM GEHEUGEN KOPPELING ---
+    function executeBuffer() {
+        if (inputBytes.length === 0) return;
+
+        // 1. Haal de mooie tekst op vóórdat we de buffer wissen, om in de console te printen!
+        const formattedText = getFormattedLine(inputBytes);
+        appendOutput("> " + formattedText, "stdout"); // GEEN ruwe bytes meer, maar: > PRINT "Hallo"
+
+        // 2. Reserveer geheugen in de WASM wereld en stuur naar de parser
+        const bufferPtr = Module._malloc(inputBytes.length);
+        Module.HEAPU8.set(inputBytes, bufferPtr);
+
         Module.ccall(
             'run_basic_line',
             null,
-            ['string', 'number'],
-            [codeLine, spectrumMachinePointer]
+            ['number', 'number', 'number'],
+            [bufferPtr, inputBytes.length, spectrumMachinePointer]
         );
+        Module._free(bufferPtr);
 
-        // Maak het invoerveld weer leeg voor de volgende regel
-        inputField.value = "";
+        // 3. Reset de UI voor de volgende regel (Dit maakt het hok direct leeg!)
+        inputBytes = [];
+        setMode('K');
+        updateDisplay(); // Aanroep met lege array, dus het typed-text vak wordt netjes gewist.
     }
 
-    // UI-Helper om tekst naar je HTML-scherm/terminal te schrijven
     function appendOutput(text, className) {
         const consoleDiv = document.getElementById("console-output");
         const line = document.createElement("div");
-        line.className = className;
+        line.style.color = className === "error" ? "#f55" : "#0f0";
         line.textContent = text;
         consoleDiv.appendChild(line);
-
-        // Zorg dat de terminal automatisch naar beneden scrolt bij nieuwe output
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
     }
-
-    // Event listener voor de Enter-toets in het invoerveld
-    // Event listener voor sneltoetsen (zoals P voor PRINT) en de Enter-toets
-    document.getElementById("basic-input").addEventListener("keydown", function(event) {
-        const inputField = event.target;
-
-        // RETRO MAGIE: Als het veld nog LEEG is en de gebruiker drukt op 'p' of 'P'
-        if (inputField.value === "" && (event.key === "p" || event.key === "P")) {
-            // Voorkom dat de losse letter 'p' in het vakje getypt wordt
-            event.preventDefault();
-            // Tover direct het hele keyword op het scherm!
-            inputField.value = "PRINT ";
-            return;
-        }
-
-        // Gewone afhandeling voor de Enter-toets
-        if (event.key === "Enter") {
-            handleExecute();
-        }
-    });
 </script>
-
 <script src="zx_basic.js"></script>
 
 </body>

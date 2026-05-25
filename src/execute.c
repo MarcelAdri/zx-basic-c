@@ -80,10 +80,16 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
     size_t output_size = 0;
     size_t output_counter = 0;
     size_t input_counter = 0;
+    bool in_string_literal = false;
     uint8_t command[input_size];
     ZxError err;
     while (input_counter <= input_size) {
-        if (input_counter == input_size || input[input_counter] == get_token_from_key(':', KEYMAP_MODE_LITERAL)) {
+        if (input[input_counter] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+            in_string_literal = !in_string_literal;
+        }
+        if (input_counter == input_size ||
+                (!in_string_literal &&
+                input[input_counter] == get_token_from_key(':', KEYMAP_MODE_LITERAL))) {
 
             output_size = output_counter;
 

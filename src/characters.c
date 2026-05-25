@@ -481,6 +481,17 @@ ZxError build_zx_sentence (const uint8_t *characters, const size_t length, char 
 char get_expected_cursor_mode(const uint8_t *buffer, const size_t length) {
     if (length == 0) return KEYMAP_MODE_KEYWORD; // Lege regel = Commando verwacht
 
+    bool in_quotes = false;
+    uint8_t quote_token = get_token_from_key('"', KEYMAP_MODE_LITERAL); // Vaak byte 34
+
+    for (size_t i = 0; i < length; i++) {
+        if (buffer[i] == quote_token) {
+            in_quotes = !in_quotes; // Toggle de status bij elke quote die we zien
+        }
+    }
+    if (in_quotes) {
+        return KEYMAP_MODE_LITERAL;
+    }
     uint8_t last_byte = buffer[length - 1];
 
     // Na een dubbele punt of THEN komt er altijd een commando
@@ -533,17 +544,18 @@ bool is_zx_number_character(const uint8_t c) {
         c == 43 ||
         c == 45 ||
         c == 46 ||
-        c == 69
+        c == 69 ||
+        c == 101
         ) {
         return true;
     }
     return false;
 }
 bool is_zx_number_start_character(const uint8_t c) {
-    if ((c >= 48 && c <= 57) ||
-        c == 43 ||
-        c == 45
-        ) {
+    if ((c >= 48 && c <= 57) || //0-9
+        c == 45 || // -
+        c == 43 || // +
+        c == 46) { // .
         return true;
     }
     return false;

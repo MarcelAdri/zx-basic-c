@@ -7,8 +7,12 @@
 #include <stdint.h>
 
 #include "expressions.h"
+
+#include <stdlib.h>
+
 #include "characters.h"
 #include "errors.h"
+#include "functions.h"
 #include "machine.h"
 #include "helpers.h"
 
@@ -18,7 +22,6 @@ ZxError solve_expression_to_double(ZxMachine machine, const uint8_t *expression,
     while (is_zx_space(expression[i])) {
         i++;
     }
-
     if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
         return ERR_INVALID_NUMBER;
     }
@@ -51,14 +54,21 @@ ZxError solve_expression_to_double(ZxMachine machine, const uint8_t *expression,
         return ERR_OK;
     }
 
+    if (is_function(expression[i])) {
+        double value;
+        err = zx_num_function_call(machine, expression + i, expression_size - i, &value);
+        if (err != ERR_OK) {
+            return err;
+        }
+        *result = value;
+        return ERR_OK;
+    }
+
     return ERR_INVALID_NUMBER;
 }
 
 ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression, size_t expression_size, char *result, const size_t result_size) {
     ZxError err;
-    bool is_literal = false;
-    bool is_variable = false;
-    bool is_number = false;
 
     size_t i = 0;
     while (is_zx_space(expression[i]) && i < expression_size) {
@@ -79,12 +89,32 @@ ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression,
         if (err != ERR_OK) {
             return err;
         }
-        snprintf(result, result_size, "%f", value);
+        char result_string[32];
+        err = formatted_number(value, result_string, 32);
+        if (err != ERR_OK) {
+            return err;
+        }
+        snprintf(result, result_size, "%s", result_string);
         return ERR_OK;
 
     }
     if (is_zx_number_start_character(expression[i])) {
         return parse_number_to_string(expression, expression_size, result, result_size);
+    }
+
+    if (is_function(expression[i])) {
+        double value;
+        err = zx_num_function_call(machine, expression + i, expression_size - i, &value);
+        if (err != ERR_OK) {
+            return err;
+        }
+        char result_string[32];
+        err = formatted_number(value, result_string, 32);
+        if (err != ERR_OK) {
+            return err;
+        }
+        snprintf(result, result_size, "%s", result_string);
+        return ERR_OK;
     }
 
     return ERR_INVALID_EXPRESSION;

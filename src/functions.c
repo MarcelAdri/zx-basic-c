@@ -2,50 +2,42 @@
 // Created by Marcel on 22-05-2026.
 //
 
-#include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include "functions.h"
+
+#include "characters.h"
 #include "errors.h"
+#include "expressions.h"
+#include "helpers.h"
+#include "machine.h"
 
-ZxError function_to_string (const Function *input, char *output) {
-    if (input == NULL || output == NULL) {
-        return ERR_INVALID_ARGUMENT;
+static ZxError zx_function_abs(ZxMachine machine, const uint8_t *function, size_t function_size, double *result) {
+    if (function_size <= 1) {
+        return ERR_SYNTAX_ERROR; // Geen argument meegegeven aan ABS
     }
-    switch (input->type) {
-        case FUNCTION_INT:
-            snprintf(output, MAX_FUNCTION_NAME_LENGTH, "%s", FUNCTION_INT_NAME);
-            return ERR_OK;
-        default:
-            return ERR_INVALID_FUNCTION_TYPE;
+    size_t output_size = function_size - 1;
+    uint8_t expression[output_size];
+    memcpy(expression, function + 1, output_size);
+
+    double number;
+    ZxError err = solve_expression_to_double(machine, expression, output_size, &number, 256);
+
+    if (err != ERR_OK) {
+        return err;
     }
+    *result = number < 0 ? -number : number;
+    return ERR_OK;
+
 }
 
-ZxError function_from_string (const char *input, FunctionType *output) {
-    if (input == NULL || output == NULL) {
-        return ERR_INVALID_ARGUMENT;
-    }
-    if (strcmp(input, FUNCTION_INT_NAME) == 0) {
-        *output = FUNCTION_INT;
-        return ERR_OK;
-    }
-    return ERR_INVALID_FUNCTION_TYPE;
-}
+ZxError zx_num_function_call(ZxMachine machine, const uint8_t *function, const size_t function_size, double *result) {
+    switch (function[0]) {
+        case 189:  //ABS
+            return zx_function_abs(machine, function, function_size, result);
 
-bool is_num_function(const Function *input) {
-    if (input == NULL) {
-        return false;
     }
-    if (input->type == FUNCTION_INT) {
-        return true;
-    }
-    return false;
-}
 
-bool is_string_function(const Function *input) {
-    if (input == NULL) {
-        return false;
-    }
-    //TODO: future string functions
-    return false;
+    return ERR_NOT_IMPLEMENTED;
 }

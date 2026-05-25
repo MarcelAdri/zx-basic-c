@@ -25,5 +25,8 @@ bool is_zx_alpha(uint8_t c);
 bool is_zx_space(uint8_t c);
 bool is_zx_number_character(uint8_t c);
 bool is_zx_number_start_character(uint8_t c);
+bool is_num_function(uint8_t c);
+bool is_string_function(uint8_t c);
+bool is_function(uint8_t c);
 
 #endif //ZX_BASIC_C_CHARACTERS_H

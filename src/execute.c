@@ -47,9 +47,8 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     if (in_variable_name) {
         return ERR_SYNTAX_ERROR;
     }
-
     err = solve_expression_to_double(machine,
-        expr, expr_size, &value, output_size);
+        expr, expr_size, &value, 255);
     if (err != ERR_OK) {
         return err;
     }

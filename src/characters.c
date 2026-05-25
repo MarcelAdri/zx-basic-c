@@ -560,3 +560,28 @@ bool is_zx_number_start_character(const uint8_t c) {
     }
     return false;
 }
+bool is_num_function(const uint8_t c) {
+    if (c == 165 ||   //RND
+        c == 167 ||   //PI
+        c == 176 ||   //VAL
+        c == 177 ||   //LEN
+        c == 178 ||   //SIN
+        c == 179 ||   //COS
+        c == 180 ||   //TAN
+        c == 181 ||   //ASN
+        c == 182 ||   //ACS
+        c == 183 ||   //ATN
+        c == 184 ||   //LN
+        c == 185 ||   //EXP
+        c == 186 ||   //INT
+        c == 189) {   //ABS
+        return true;
+    }
+    return false;
+}
+bool is_string_function(const uint8_t c) {
+    return true; //TODO: implement
+}
+bool is_function(const uint8_t c) {
+    return is_num_function(c) || is_string_function(c);
+}

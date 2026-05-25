@@ -90,10 +90,22 @@ ZxError formatted_number(const double number, char *out_string, const size_t out
 
     return ERR_OK;
 }
+char *format_double(const double number) {
+    char *out_string = malloc(32);
+    if (out_string == NULL) {
+        return NULL;
+    }
+    ZxError err = formatted_number(number, out_string, 32);
+    if (err != ERR_OK) {
+        free(out_string);
+        return NULL;
+    }
+    return out_string;
+}
+
 ZxError make_double(const char *text, double *out_double) {
     char *end = NULL;
     errno = 0;
-
     const double value = strtod(text, &end);
 
     if (end == text) {
@@ -119,7 +131,7 @@ ZxError make_double(const char *text, double *out_double) {
 }
 ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size, char *number_string, const size_t result_size) {
     size_t i = 0;
-    while (is_zx_space(expression[i]) && i < expression_size) {
+    while (i < expression_size && is_zx_space(expression[i])) {
         i++;
     }
 
@@ -153,7 +165,7 @@ ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size
 }
 
 ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, const size_t result_size) {
-    char number_string[result_size];
+   char number_string[result_size];
 
     const ZxError err = parse_number_to_string(expression, expression_size, number_string, result_size);
     if (err != ERR_OK) {

@@ -48,6 +48,9 @@ void error_message(const ZxError error, char *message, const size_t message_size
         case ERR_SYNTAX_ERROR:
             text = "Syntax error.";
             break;
+        case ERR_UNCLOSED_BRACKETS:
+            text = "Brackets are openend, but never closed.";
+            break;
         case ERR_UNCLOSED_QUOTES:
             text = "Quotes are openend, but never closed.";
             break;

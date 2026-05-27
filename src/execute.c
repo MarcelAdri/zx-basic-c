@@ -26,7 +26,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
             if (cmd[i] == get_token_from_key('=', KEYMAP_MODE_LITERAL)) {
                 in_variable_name = false;
                 in_expression = true;
-                err = parse_variable_name(variable_name, output_size, var_name);
+                err = parse_variable_name(variable_name, output_size, var_name, 0);
                 if (err != ERR_OK) {
                     return err;
                 }

@@ -8,7 +8,7 @@
 #include "errors.h"
 #include "machine.h"
 
-ZxError zx_num_function_call(ZxMachine machine, const uint8_t *function, size_t function_size, double *result);
+ZxError zx_num_function_call(uint8_t function, double num_argument, const char *string_arg, double *result);
 
 
 #endif //ZX_BASIC_C_FUNCTIONS_H

@@ -539,10 +539,38 @@ bool is_zx_space(const uint8_t c) {
     }
     return false;
 }
+bool is_zx_plus_character(const uint8_t c) {
+    if (c == 43) {
+        return true;
+    }
+    return false;
+}
+bool is_zx_minus_character(const uint8_t c) {
+    if (c == 45) {
+        return true;
+    }
+    return false;
+}
+bool is_zx_asterisk_character(const uint8_t c) {
+    if (c == 42) {
+        return true;
+    }
+    return false;
+}
+bool is_zx_slash_character(const uint8_t c) {
+    if (c == 47) {
+        return true;
+    }
+    return false;
+}
+bool is_zx_power_character(const uint8_t c) {
+    if (c == 128) {
+        return true;
+    }
+    return false;
+}
 bool is_zx_number_character(const uint8_t c) {
     if ((c >= 48 && c <= 57) ||
-        c == 43 ||
-        c == 45 ||
         c == 46 ||
         c == 69 ||
         c == 101
@@ -553,19 +581,13 @@ bool is_zx_number_character(const uint8_t c) {
 }
 bool is_zx_number_start_character(const uint8_t c) {
     if ((c >= 48 && c <= 57) || //0-9
-        c == 45 || // -
-        c == 43 || // +
         c == 46) { // .
         return true;
     }
     return false;
 }
-bool is_num_function(const uint8_t c) {
-    if (c == 165 ||   //RND
-        c == 167 ||   //PI
-        c == 176 ||   //VAL
-        c == 177 ||   //LEN
-        c == 178 ||   //SIN
+bool is_num_function_num_arg(const uint8_t c) {
+    if (c == 178 ||   //SIN
         c == 179 ||   //COS
         c == 180 ||   //TAN
         c == 181 ||   //ASN
@@ -574,14 +596,35 @@ bool is_num_function(const uint8_t c) {
         c == 184 ||   //LN
         c == 185 ||   //EXP
         c == 186 ||   //INT
+        c == 187 ||   //SQR
+        c == 188 ||   //SGN
         c == 189) {   //ABS
         return true;
     }
     return false;
 }
+bool is_num_function_no_arg(const uint8_t c) {
+    if (c == 165 ||  //RND
+        c == 167     //PI
+        ) {
+        return true;
+    }
+    return false;
+}
+bool is_num_function_str_arg(const uint8_t c) {
+    if (c == 176 ||  //VAL
+        c == 177     //LEN
+        ) {
+        return true;
+    }
+    return false;
+}
+bool is_num_function(const uint8_t c) {
+    return is_num_function_num_arg(c) || is_num_function_no_arg(c) || is_num_function_str_arg(c);
+}
 bool is_string_function(const uint8_t c) {
     return true; //TODO: implement
 }
 bool is_function(const uint8_t c) {
-    return is_num_function(c) || is_string_function(c);
+    return is_num_function_num_arg(c) || is_string_function(c);
 }

@@ -129,7 +129,7 @@ ZxError make_double(const char *text, double *out_double) {
     }
     return ERR_OK;
 }
-ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size, char *number_string, const size_t result_size) {
+ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size, char *number_string, const size_t result_size, size_t *bytes_read) {
     size_t i = 0;
     while (i < expression_size && is_zx_space(expression[i])) {
         i++;
@@ -156,6 +156,7 @@ ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size
             if (err != ERR_OK) {
                 return err;
             }
+            *bytes_read = i;
             strncpy(number_string, result, result_size);
             return ERR_OK;
         }
@@ -164,19 +165,42 @@ ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size
     return ERR_INVALID_EXPRESSION;
 }
 
-ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, const size_t result_size) {
-   char number_string[result_size];
-
-    const ZxError err = parse_number_to_string(expression, expression_size, number_string, result_size);
-    if (err != ERR_OK) {
-        return err;
+ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, const size_t result_size, size_t *bytes_read) {
+    char number_string[result_size];
+    size_t i = 0;
+    while (i < expression_size && is_zx_space(expression[i])) {
+        i++;
     }
+    if (is_zx_number_start_character(expression[i])) {
+        size_t len = 0;
+        while (is_zx_number_character(expression[i]) &&
+            len < result_size - 1 &&
+            i < expression_size) {
+            number_string[len] = *get_content_from_token(expression[i]);
+            len++;
+            i++;
+            }
+        if (len > 0) {
+            number_string[len] = '\0';
+            char result[result_size];
+            double value;
+            ZxError err = make_double(number_string, &value);
+            if (err != ERR_OK) {
+                return err;
+            }
+            *number = value;
+            *bytes_read = i;
+            return ERR_OK;
 
-    return make_double(number_string, number);
+        }
+        return ERR_INVALID_EXPRESSION;
+    }
+    return ERR_INVALID_EXPRESSION;
+
 }
 
 ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, char *literal, const size_t result_size) {
-
+    //TODO: expand with string variables and string functions
     size_t i = 0;
     while (is_zx_space(expression[i]) && i < expression_size) {
         i++;
@@ -234,7 +258,7 @@ ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expre
     return ERR_OK;
 }
 
-ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, char *variable_name) {
+ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, char *variable_name, size_t *bytes_read) {
     size_t i = 0;
     while (is_zx_space(expression[i]) && i < expression_size) {
         i++;
@@ -259,6 +283,8 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
         i++;
     }
     variable_name[len] = '\0';
+
+    *bytes_read = i;
 
     return ERR_OK;
 

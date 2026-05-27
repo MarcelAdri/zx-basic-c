@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include <string.h>
 #include "execute.h"
+
+#include <stdio.h>
+
 #include "errors.h"
 #include "machine.h"
 #include "expressions.h"
@@ -47,8 +50,9 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     if (in_variable_name) {
         return ERR_SYNTAX_ERROR;
     }
+    size_t bytes_read;
     err = solve_expression_to_double(machine,
-        expr, expr_size, &value, 255);
+        expr, expr_size, &value, 255, &bytes_read);
     if (err != ERR_OK) {
         return err;
     }
@@ -56,20 +60,67 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
 }
 
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
-    if (output_size <= 1) { // Alleen 'PRINT' getypt zonder argumenten
-        machine_print_output(machine, "");
+    if (output_size <= 1) {
+        machine_print_output(machine, "\n"); // Lege print doet alleen een enter!
         return ERR_OK;
     }
-    char result[256] = {0};
-    uint8_t expression[output_size - 1];
-    memcpy(expression, cmd + 1, output_size - 1);
 
-    const ZxError err = solve_expression_to_string(machine,
-         expression, sizeof(expression), result, sizeof(result));
-    if (err == ERR_OK) {
+    size_t cursor = 1;
+    bool print_newline = true; // Standaard printen we een enter op het eind
+
+    while (cursor < output_size) {
+        print_newline = true;
+        char result[256] = {0};
+
+        // Let op: je moet solve_expression_to_string zo aanpassen dat hij
+        // net als je nieuwe recursieve parser (via bytes_read of ctx) teruggeeft
+        // hoeveel bytes hij heeft opgeslokt, anders weet je niet waar ; of , staat!
+        size_t bytes_read = 0;
+        ZxError err = solve_expression_to_string(machine, cmd + cursor, output_size - cursor, result, sizeof(result), &bytes_read);
+        if (err != ERR_OK) return err;
         machine_print_output(machine, result);
+        cursor += bytes_read;
+
+        if (cursor >= output_size) break;
+
+        // Kijk wat het scheidingsteken is
+        uint8_t separator = cmd[cursor];
+
+        if (separator == get_token_from_key(';', KEYMAP_MODE_LITERAL)) {
+            print_newline = false; // Bij ";" onderdrukken we de enter
+            cursor++;
+        }
+        else if (separator == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+            int current_x = machine_get_cursor_x(machine);
+            if (current_x < 16) {
+                int spaces_needed = 16 - current_x;
+                char space_buffer[32];
+
+                snprintf(space_buffer, sizeof(space_buffer), "%*s", spaces_needed, "");
+
+                machine_print_output(machine, space_buffer);
+            } else {
+                machine_print_output(machine, "\n");
+            }
+
+            print_newline = false;
+            cursor++;
+        } else if (separator == get_token_from_key('\'', KEYMAP_MODE_LITERAL)) {
+            machine_print_output(machine, "\n");
+
+            print_newline = false;
+            cursor++;
+        }
+        else {
+            return ERR_SYNTAX_ERROR;
+        }
     }
-    return err;
+
+    if (print_newline) {
+        machine_print_output(machine, "\n");
+    }
+
+    return ERR_OK;
 }
 
 ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size) {

@@ -230,7 +230,7 @@ double parse_factor(ParserContext *ctx) {
 }
 
 
-ZxError solve_expression_to_double(ZxMachine machine, const uint8_t *expression, size_t expression_size, double *result, const size_t result_size) {
+ZxError solve_expression_to_double(ZxMachine machine, const uint8_t *expression, size_t expression_size, double *result, const size_t result_size, size_t *bytes_read) {
     ZxError err;
     ParserContext ctx = {0};
     ctx.machine = machine;
@@ -242,12 +242,15 @@ ZxError solve_expression_to_double(ZxMachine machine, const uint8_t *expression,
     if (ctx.last_error != ERR_OK) {
         return ctx.last_error;
     }
+    if (bytes_read != NULL) {
+        *bytes_read = ctx.cursor;
+    }
     *result = value;
     return ERR_OK;
 
 }
 
-ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression, size_t expression_size, char *result, const size_t result_size) {
+ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression, size_t expression_size, char *result, const size_t result_size, size_t *bytes_read) {
     ZxError err;
 
     size_t i = 0;
@@ -256,12 +259,15 @@ ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression,
     }
 
     if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
-        return parse_string_literal(expression, expression_size - i, result, result_size);
+        err = parse_string_literal(expression, expression_size - i, result, result_size, bytes_read);
+        if (err != ERR_OK) {
+            return err;
+        }
+        return ERR_OK;
     }
     if (is_zx_alpha(expression[i])) {
         char variable_name[MAX_VAR_NAME_LEN];
-        size_t bytes_read;
-        err = parse_variable_name(expression, expression_size, variable_name, &bytes_read);
+        err = parse_variable_name(expression, expression_size, variable_name, bytes_read);
         if (err != ERR_OK) {
             return err;
         }
@@ -281,7 +287,7 @@ ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression,
     }
 
     double value;
-    err = solve_expression_to_double(machine, expression, expression_size, &value, 32);
+    err = solve_expression_to_double(machine, expression, expression_size, &value, 32, bytes_read);
     if (err != ERR_OK) {
         return err;
     }

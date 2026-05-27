@@ -199,7 +199,7 @@ ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size
 
 }
 
-ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, char *literal, const size_t result_size) {
+ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, char *literal, const size_t result_size, size_t *bytes_read) {
     //TODO: expand with string variables and string functions
     size_t i = 0;
     while (is_zx_space(expression[i]) && i < expression_size) {
@@ -209,9 +209,19 @@ ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, 
     if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
         size_t len = 0;
         i++;
-        while (expression[i] != get_token_from_key('"', KEYMAP_MODE_LITERAL) &&
-            len < result_size - 1 &&
-            i < expression_size) {
+        while (len < result_size - 1 && i < expression_size) {
+
+            if  (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+                if (i + 1 < expression_size && expression[i+1] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+                    literal[len] = '"';
+                    len++;
+                    i += 2;
+                    continue;
+                }
+                literal[len] = '\0';
+                *bytes_read = i + 1;
+                return ERR_OK;
+            }
             if (!is_zx_printable_character(expression[i])) {
                 return ERR_INVALID_STRING_LITERAL;
             }
@@ -219,17 +229,13 @@ ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, 
             len++;
             i++;
         }
-
-        if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
-            literal[len] = '\0';
-            return ERR_OK;
-        }
         return ERR_UNCLOSED_QUOTES;
     }
     return ERR_INVALID_STRING_LITERAL;
 }
 ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expression_size, char *literal, const size_t result_size) {
-    const ZxError err = parse_string_literal(expression, expression_size, literal, result_size);
+    size_t bytes_read;
+    const ZxError err = parse_string_literal(expression, expression_size, literal, result_size, &bytes_read);
     if (err != ERR_OK) {
         return err;
     }

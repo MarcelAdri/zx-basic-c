@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "machine.h"
 #include "errors.h"
 
@@ -28,6 +29,8 @@ typedef struct Machine {
     int numeric_variable_capacity;
 
     ZxPrintCallback print_callback;
+    uint8_t cursor_x;
+    uint8_t cursor_y;
 } Machine;
 
 static void sanitize_variabele_name(char *dest, const char *src, const size_t max_len) {
@@ -120,14 +123,53 @@ void machine_destroy(ZxMachine machine) {
         free(machine);
     }
 }
+uint8_t machine_get_cursor_x(ZxMachine machine) {
+    if (machine != NULL) {
+        return machine->cursor_x;
+    }
+    return 0;
+}
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback) {
     if (machine != NULL) {
         machine->print_callback = callback;
     }
 }
 void machine_print_output(ZxMachine machine, const char *text) {
-    // Veiligheidsklep: alleen aanroepen als de UI daadwerkelijk een callback heeft geregistreerd!
-    if (machine != NULL && machine->print_callback != NULL) {
-        machine->print_callback(text); // <--- HIER gebeurt de magie!
+    if (machine == NULL || machine->print_callback == NULL || text == NULL) return;
+
+    size_t len = strlen(text);
+    if (len == 0) return;
+
+    size_t required_size = len + (len / 32) + 2;
+
+    char *output_buffer = malloc(required_size);
+    if (output_buffer == NULL) {
+
+        return;
     }
+
+    size_t out_idx = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        if (machine->cursor_x >= 32) {
+            output_buffer[out_idx] = '\n';
+            out_idx++;
+            machine->cursor_x = 0;
+        }
+
+        output_buffer[out_idx] = text[i];
+        out_idx++;
+
+        if (text[i] == '\n') {
+            machine->cursor_x = 0;
+        } else {
+            machine->cursor_x++;
+        }
+    }
+
+    output_buffer[out_idx] = '\0';
+
+    machine->print_callback(output_buffer);
+
+    free(output_buffer);
 }

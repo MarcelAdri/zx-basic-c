@@ -8,7 +8,20 @@
 
         /* Terminal Styling */
         #emulator-container { flex: 1; max-width: 600px; }
-        #console-output { background: #000; color: #0f0; font-family: monospace; height: 300px; padding: 10px; overflow-y: auto; border: 4px solid #555; }
+        #console-output {
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+            height: 300px;
+            padding: 10px;
+            overflow-y: auto;
+            border: 4px solid #555;
+
+            /* DE FIX VOOR DE SPATIES EN ENTERS: */
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.2;
+        }
         #input-line { background: #000; color: #0f0; font-family: monospace; padding: 10px; border: 4px solid #555; border-top: none; font-size: 16px; display: flex; }
         #cursor { background: #f00; color: #fff; width: 14px; text-align: center; font-weight: bold; animation: blink 1s step-end infinite; margin-left: 5px; }
 
@@ -269,9 +282,10 @@
     function executeBuffer() {
         if (inputBytes.length === 0) return;
 
-        // 1. Haal de mooie tekst op vóórdat we de buffer wissen, om in de console te printen!
+        // 1. Print het commando mét een extra enter erachter, zodat de
+        //    output van C netjes op een schone regel begint.
         const formattedText = getFormattedLine(inputBytes);
-        appendOutput("> " + formattedText, "stdout"); // GEEN ruwe bytes meer, maar: > PRINT "Hallo"
+        appendOutput("> " + formattedText, "stdout");
 
         // 2. Reserveer geheugen in de WASM wereld en stuur naar de parser
         const bufferPtr = Module._malloc(inputBytes.length);
@@ -285,18 +299,21 @@
         );
         Module._free(bufferPtr);
 
-        // 3. Reset de UI voor de volgende regel (Dit maakt het hok direct leeg!)
+        // 3. Reset de UI voor de volgende regel
         inputBytes = [];
         setMode('K');
-        updateDisplay(); // Aanroep met lege array, dus het typed-text vak wordt netjes gewist.
+        updateDisplay();
     }
 
     function appendOutput(text, className) {
         const consoleDiv = document.getElementById("console-output");
-        const line = document.createElement("div");
-        line.style.color = className === "error" ? "#f55" : "#0f0";
-        line.textContent = text;
-        consoleDiv.appendChild(line);
+        const span = document.createElement("span");
+        span.style.color = className === "error" ? "#f55" : "#0f0";
+
+        // DE FIX: Emscripten stal de \n, dus wij plakken hem er hier gewoon weer achter!
+        span.textContent = text + "\n";
+
+        consoleDiv.appendChild(span);
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
     }
 </script>

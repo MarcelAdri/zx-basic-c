@@ -14,7 +14,7 @@
 #endif
 
 void ons_systeem_print_kanaal(const char *text) {
-    printf("%s\n", text);
+    printf("%s", text);
 }
 EMSCRIPTEN_KEEPALIVE
 ZxMachine UI_machine_create(void) {

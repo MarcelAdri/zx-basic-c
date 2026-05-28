@@ -453,19 +453,19 @@ const char* get_content_from_token (const uint8_t token) {
 
 ZxError build_zx_sentence (const uint8_t *characters, const size_t length, char *result) {
     if (result == NULL || characters == NULL) {
-        return ERR_INVALID_ARGUMENT;
+        return ERR_UNKNOWN;
     }
 
     size_t len = 0;
     for (int i = 0; i < length; i++) {
         const char *token = ZX_CHARACTERS[characters[i]];
         if (token == NULL) {
-            return ERR_INVALID_CHARACTER;
+            return ERR_UNKNOWN;
         }
 
         const size_t token_len = strlen(token);
         if  (len + token_len >= MAX_TEXT_SENTENCE_LEN - 1) {
-            return ERR_LONG_SENTENCE;
+            return ERR_UNKNOWN;
         }
 
         memcpy(result + len, token, token_len);
@@ -473,7 +473,7 @@ ZxError build_zx_sentence (const uint8_t *characters, const size_t length, char 
 
     }
     result[len] = '\0';
-    return ERR_OK;
+    return ERR_0_OK;
 
 }
 

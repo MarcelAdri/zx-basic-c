@@ -17,7 +17,26 @@ typedef struct {
     double value;
 } NumericVariable;
 
+typedef enum {
+    ZX_STATE_IDLE,          // Wacht op een commando onderin beeld
+    ZX_STATE_RUNNING,       // Bezig met het uitvoeren van BASIC (of een commando)
+    ZX_STATE_WAIT_SCROLL,   // Scherm is vol, wacht op Y/N/SPACE
+    ZX_STATE_WAIT_INPUT,    // BASIC programma staat stil door een INPUT commando
+    ZX_STATE_WAIT_PAUSE     // BASIC programma staat stil door PAUSE commando
+} ZxState;
+
 typedef struct Machine {
+    ZxState state;
+
+    uint8_t text_screen[22][32];
+    uint8_t system_screen[2][32];
+
+    uint8_t text_cursor_x;
+    uint8_t text_cursor_y;
+
+    uint16_t current_line;
+    uint8_t current_statement;
+
     double loop_counters[26];
     bool loop_counter_defined[26];
 
@@ -29,8 +48,7 @@ typedef struct Machine {
     int numeric_variable_capacity;
 
     ZxPrintCallback print_callback;
-    uint8_t cursor_x;
-    uint8_t cursor_y;
+
 } Machine;
 
 static void sanitize_variabele_name(char *dest, const char *src, const size_t max_len) {
@@ -69,6 +87,12 @@ ZxMachine machine_create(void) {
 
     memset(machine, 0, sizeof(Machine));
 
+    machine->text_cursor_x = 0;
+    machine->text_cursor_y = 0;
+
+    memset(&machine->text_screen[0][0], ' ', 22 * 32);
+    memset(&machine->system_screen[0][0], ' ', 2 * 32);
+
     machine->numeric_variable_capacity = 4;
     machine->numeric_vars = malloc(machine->numeric_variable_capacity * sizeof(NumericVariable));
     if (machine->numeric_vars == NULL) {
@@ -78,19 +102,38 @@ ZxMachine machine_create(void) {
 
     return machine;
 }
+int machine_get_state(ZxMachine machine) {
+    if (machine != NULL) {
+        return (int)machine->state;
+    }
+    return 0; // ZX_STATE_IDLE
+}
+void machine_set_location(ZxMachine machine, const uint16_t line, const uint8_t statement) {
+    if (machine) {
+        machine->current_line = line;
+        machine->current_statement = statement;
+    }
+}
 
+uint16_t machine_get_current_line(ZxMachine machine) {
+    return machine ? machine->current_line : 0;
+}
+
+uint8_t machine_get_current_statement(ZxMachine machine) {
+    return machine ? machine->current_statement : 1;
+}
 ZxError machine_set_numeric(ZxMachine machine, const char *var_name, double value) {
     int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
     if (i != NOT_FOUND) {
         machine->numeric_vars[i].value = value;
-        return ERR_OK;
+        return ERR_0_OK;
     }
 
     if (machine->numeric_variable_count >= machine->numeric_variable_capacity) {
         machine->numeric_variable_capacity *= 2;
         machine->numeric_vars = realloc(machine->numeric_vars, machine->numeric_variable_capacity * sizeof(NumericVariable));
         if (machine->numeric_vars == NULL) {
-            return ERR_MEM_ALLOCATION;
+            return ERR_UNKNOWN;
         }
     }
     const int nieuw_index = machine->numeric_variable_count;
@@ -101,16 +144,16 @@ ZxError machine_set_numeric(ZxMachine machine, const char *var_name, double valu
 
     machine->numeric_variable_count++;
 
-    return ERR_OK;
+    return ERR_0_OK;
 }
 
 ZxError machine_get_numeric(ZxMachine machine, const char *var_name, double *value) {
     int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
     if (i != NOT_FOUND) {
         *value = machine->numeric_vars[i].value;
-        return ERR_OK;
+        return ERR_0_OK;
     }
-    return ERR_UNDEFINED_VARIABLE;
+    return ERR_2_VARIABLE_NOT_FOUND;
 }
 
 void machine_destroy(ZxMachine machine) {
@@ -123,9 +166,15 @@ void machine_destroy(ZxMachine machine) {
         free(machine);
     }
 }
-uint8_t machine_get_cursor_x(ZxMachine machine) {
+uint8_t machine_get_text_cursor_x(ZxMachine machine) {
     if (machine != NULL) {
-        return machine->cursor_x;
+        return machine->text_cursor_x;
+    }
+    return 0;
+}
+uint8_t machine_get_text_cursor_y(ZxMachine machine) {
+    if (machine != NULL) {
+        return machine->text_cursor_y;
     }
     return 0;
 }
@@ -134,42 +183,61 @@ void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback) {
         machine->print_callback = callback;
     }
 }
-void machine_print_output(ZxMachine machine, const char *text) {
+const uint8_t* machine_get_text_screen(ZxMachine machine) {
+    if (machine != NULL) {
+        return &machine->text_screen[0][0]; // Pointer naar de allereerste pixel
+    }
+    return NULL;
+}
+void machine_next_line(ZxMachine machine) {
+    machine->text_cursor_x = 0;
+    machine->text_cursor_y++;
+    if (machine->text_cursor_y > 21) {
+        machine->state = ZX_STATE_WAIT_SCROLL;
+        memmove(&machine->text_screen[0][0], &machine->text_screen[1][0], 21 * 32);
+        memset(&machine->text_screen[21][0], ' ', 32);
+        machine->text_cursor_y = 21;
+    }
+
+}
+void machine_print_to_text(ZxMachine machine, const char *text) {
     if (machine == NULL || machine->print_callback == NULL || text == NULL) return;
 
     size_t len = strlen(text);
     if (len == 0) return;
 
-    size_t required_size = len + (len / 32) + 2;
-
-    char *output_buffer = malloc(required_size);
-    if (output_buffer == NULL) {
-
-        return;
-    }
-
-    size_t out_idx = 0;
-
     for (size_t i = 0; i < len; i++) {
-        if (machine->cursor_x >= 32) {
-            output_buffer[out_idx] = '\n';
-            out_idx++;
-            machine->cursor_x = 0;
-        }
-
-        output_buffer[out_idx] = text[i];
-        out_idx++;
-
         if (text[i] == '\n') {
-            machine->cursor_x = 0;
+            machine_next_line(machine);
+            continue;
+        }
+        machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = text[i];
+        if (machine->text_cursor_x >= 31) {
+            machine_next_line(machine);
         } else {
-            machine->cursor_x++;
+            machine->text_cursor_x++;
         }
     }
+}
+const uint8_t* machine_get_system_screen(ZxMachine machine) {
+    if (machine != NULL) {
+        return &machine->system_screen[0][0];
+    }
+    return NULL;
+}
 
-    output_buffer[out_idx] = '\0';
+// Een simpele functie om een melding (zoals "0 OK, 0:1") onderin te zetten
+void machine_print_to_system(ZxMachine machine, const char *text) {
+    if (machine == NULL || text == NULL) return;
 
-    machine->print_callback(output_buffer);
+    // Maak het systeemvak eerst even netjes schoon met spaties
+    memset(&machine->system_screen[0][0], ' ', 2 * 32);
 
-    free(output_buffer);
+    size_t len = strlen(text);
+    for (size_t i = 0; i < len && i < 64; i++) {
+        // Bereken simpelweg de X en Y op basis van de index (max 64 tekens)
+        int y = i / 32;
+        int x = i % 32;
+        machine->system_screen[y][x] = text[i];
+    }
 }

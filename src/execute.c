@@ -30,7 +30,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
                 in_variable_name = false;
                 in_expression = true;
                 err = parse_variable_name(variable_name, output_size, var_name, 0);
-                if (err != ERR_OK) {
+                if (err != ERR_0_OK) {
                     return err;
                 }
                 continue;
@@ -40,7 +40,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
                 name_size++;
                 continue;
             }
-            return ERR_INVALID_VARIABLE_NAME;
+            return ERR_2_VARIABLE_NOT_FOUND;
         }
         if (in_expression && expr_size < sizeof(expr) - 1) {
             expr[expr_size] = cmd[i];
@@ -48,12 +48,12 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
         }
     }
     if (in_variable_name) {
-        return ERR_SYNTAX_ERROR;
+        return ERR_2_VARIABLE_NOT_FOUND;
     }
     size_t bytes_read;
     err = solve_expression_to_double(machine,
         expr, expr_size, &value, 255, &bytes_read);
-    if (err != ERR_OK) {
+    if (err != ERR_0_OK) {
         return err;
     }
     return machine_set_numeric(machine, var_name, value);
@@ -61,8 +61,8 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
 
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
-        machine_print_output(machine, "\n"); // Lege print doet alleen een enter!
-        return ERR_OK;
+        machine_print_to_text(machine, "\n"); // Lege print doet alleen een enter!
+        return ERR_0_OK;
     }
 
     size_t cursor = 1;
@@ -77,8 +77,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         // hoeveel bytes hij heeft opgeslokt, anders weet je niet waar ; of , staat!
         size_t bytes_read = 0;
         ZxError err = solve_expression_to_string(machine, cmd + cursor, output_size - cursor, result, sizeof(result), &bytes_read);
-        if (err != ERR_OK) return err;
-        machine_print_output(machine, result);
+        if (err != ERR_0_OK) return err;
+        machine_print_to_text(machine, result);
         cursor += bytes_read;
 
         if (cursor >= output_size) break;
@@ -91,47 +91,49 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             cursor++;
         }
         else if (separator == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
-            int current_x = machine_get_cursor_x(machine);
+            int current_x = machine_get_text_cursor_x(machine);
             if (current_x < 16) {
                 int spaces_needed = 16 - current_x;
                 char space_buffer[32];
 
                 snprintf(space_buffer, sizeof(space_buffer), "%*s", spaces_needed, "");
 
-                machine_print_output(machine, space_buffer);
+                machine_print_to_text(machine, space_buffer);
             } else {
-                machine_print_output(machine, "\n");
+                machine_print_to_text(machine, "\n");
             }
 
             print_newline = false;
             cursor++;
         } else if (separator == get_token_from_key('\'', KEYMAP_MODE_LITERAL)) {
-            machine_print_output(machine, "\n");
+            machine_print_to_text(machine, "\n");
 
             print_newline = false;
             cursor++;
         }
         else {
-            return ERR_SYNTAX_ERROR;
+            return ERR_C_NONSENS_IN_BASIC;
         }
     }
 
     if (print_newline) {
-        machine_print_output(machine, "\n");
+        machine_print_to_text(machine, "\n");
     }
 
-    return ERR_OK;
+    return ERR_0_OK;
 }
 
 ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size) {
     if (machine == NULL || input == NULL || input_size == 0) {
-        return ERR_INVALID_ARGUMENT;
+        return ERR_UNKNOWN;
     }
     size_t output_size = 0;
     size_t output_counter = 0;
     size_t input_counter = 0;
     bool in_string_literal = false;
     uint8_t command[input_size];
+    uint8_t statement_counter = 1;
+
     ZxError err;
     while (input_counter <= input_size) {
         if (input[input_counter] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
@@ -144,6 +146,7 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             output_size = output_counter;
 
             if (output_size > 0) {
+                machine_set_location(machine, 0, statement_counter);
                 switch (command[0]) {
                     case 245: //PRINT
                         err = execute_cmd_print(machine, command, output_size);
@@ -152,14 +155,15 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                         err = execute_cmd_let(machine, command, output_size);
                         break;
                     default:
-                        return ERR_NOT_IMPLEMENTED;
+                        return ERR_NOT_YET_IMPLEMENTED;
                 }
-                if (err != ERR_OK) {
+                if (err != ERR_0_OK) {
                     return err;
                 }
             }
 
             output_counter = 0;
+            statement_counter++;
 
             if (input_counter == input_size) {
                 break;
@@ -174,6 +178,6 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
         output_counter++;
     }
 
-    return ERR_OK;
+    return ERR_0_OK;
 }
 

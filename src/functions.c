@@ -9,16 +9,16 @@
 
 static ZxError zx_function_abs(const double argument, double *result) {
     *result = argument < 0 ? -argument : argument;
-    return ERR_OK;
+    return ERR_0_OK;
 
 }
 
 ZxError zx_num_function_call(const uint8_t function, const double num_argument, const char *string_arg, double *result) {
     if (result == NULL) {
-        return ERR_INVALID_ARGUMENT;
+        return ERR_UNKNOWN;
     }
     if (is_num_function_str_arg(function) && string_arg == NULL) {
-        return ERR_INVALID_ARGUMENT;
+        return ERR_A_INVALID_ARGUMENT;
     }
 
     switch (function) {
@@ -27,5 +27,5 @@ ZxError zx_num_function_call(const uint8_t function, const double num_argument, 
 
     }
 
-    return ERR_NOT_IMPLEMENTED;
+    return ERR_NOT_YET_IMPLEMENTED;
 }

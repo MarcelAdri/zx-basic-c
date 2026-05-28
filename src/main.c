@@ -38,6 +38,19 @@ const char* UI_get_keyword_for_token(int token) {
     return get_content_from_token(token);
 }
 EMSCRIPTEN_KEEPALIVE
+const uint8_t* UI_get_text_screen(ZxMachine machine) {
+    // We geven simpelweg de pointer naar de 22x32 array terug!
+    return machine_get_text_screen(machine);
+}
+EMSCRIPTEN_KEEPALIVE
+int UI_get_machine_state(ZxMachine machine) {
+    return machine_get_state(machine);
+}
+EMSCRIPTEN_KEEPALIVE
+const uint8_t* UI_get_system_screen(ZxMachine machine) {
+    return machine_get_system_screen(machine);
+}
+EMSCRIPTEN_KEEPALIVE
 const char* UI_format_zx_line(const uint8_t *buffer, const size_t length) {
     // Statische buffer, zodat deze in het geheugen blijft bestaan nadat de functie klaar is
     static char formatted_output[2048];
@@ -47,7 +60,7 @@ const char* UI_format_zx_line(const uint8_t *buffer, const size_t length) {
     }
 
     ZxError err = build_zx_sentence(buffer, length, formatted_output);
-    if (err == ERR_OK) {
+    if (err == ERR_0_OK) {
         return formatted_output; // Geef de prachtig geformatteerde tekst terug!
     }
     error_message(err, formatted_output, sizeof formatted_output);
@@ -59,23 +72,26 @@ char UI_get_cursor_mode(const uint8_t *buffer, const size_t length) {
 }
 
 // Deze functie maken we beschikbaar voor JavaScript!
-EMSCRIPTEN_KEEPALIVE
-void run_basic_line(const uint8_t *buffer, size_t length, ZxMachine machine) {
-    if (machine == NULL) {
-        printf("Fout: Geen actieve machinecontext meegegeven vanuit de UI.\n");
-        return;
-    }
+#include <stdio.h>
 
-    if (buffer == NULL || length == 0) {
-        printf("Fout: Geen opdracht ontvangen.\n");
-        return;
-    }
-    const ZxError err = execute(machine, buffer, length);
-    if (err != ERR_OK) {
-        char error_message_text[256];
-        error_message(err, error_message_text, sizeof error_message_text);
-        printf("%s\n", error_message_text);
-    }
+EMSCRIPTEN_KEEPALIVE
+void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
+    if (machine == NULL || buffer == NULL || size == 0) return;
+
+    // 1. Voer de BASIC code uit!
+    ZxError err = execute(machine, buffer, size);
+
+    // 2. Haal de foutmelding op (bijv "0 OK" of "C Nonsense in BASIC")
+    const char *msg = get_zx_error_message(err);
+    uint16_t line = machine_get_current_line(machine);
+    uint8_t stmt = machine_get_current_statement(machine);
+
+    // 3. Formatteer hem zoals een echte Spectrum (met statement pointer)
+    char sys_msg[64];
+    snprintf(sys_msg, sizeof(sys_msg), "%s, %u:%d", msg, line, stmt);
+
+    // 4. Stuur hem naar het systeem-scherm
+    machine_print_to_system(machine, sys_msg);
 }
 
 int main(void) {

@@ -7,23 +7,23 @@
         body { background: #222; color: #fff; font-family: sans-serif; padding: 20px; display: flex; gap: 20px; }
 
         /* Terminal Styling */
-        #emulator-container { flex: 1; max-width: 600px; }
+        #emulator-container { flex: 1; max-width: 600px; display: flex; flex-direction: column; }
         #console-output {
-            background: #000;
-            color: #0f0;
-            font-family: monospace;
-            height: 300px;
-            padding: 10px;
-            overflow-y: auto;
-            border: 4px solid #555;
-
-            /* DE FIX VOOR DE SPATIES EN ENTERS: */
-            white-space: pre-wrap;
-            word-break: break-all;
-            line-height: 1.2;
+            background: #000; color: #0f0; font-family: monospace;
+            height: 350px; padding: 10px; border: 4px solid #555; border-bottom: none;
+            white-space: pre; /* Pre zorgt dat het raster strak blijft! */
+            overflow: hidden; /* Geen scrollbalken meer, C is de baas! */
+            line-height: 1.2; font-size: 16px;
         }
-        #input-line { background: #000; color: #0f0; font-family: monospace; padding: 10px; border: 4px solid #555; border-top: none; font-size: 16px; display: flex; }
-        #cursor { background: #f00; color: #fff; width: 14px; text-align: center; font-weight: bold; animation: blink 1s step-end infinite; margin-left: 5px; }
+        #system-area {
+            background: #111; color: #0ff; border: 4px solid #555; border-top: 2px dashed #444;
+            padding: 10px; height: 40px; display: flex; flex-direction: column;
+            font-family: monospace; line-height: 1.2; font-size: 16px; white-space: pre;
+        }
+        #input-line {
+            color: #0f0; display: flex; margin-top: 5px;
+        }
+        #cursor { background: #f00; color: #fff; width: 14px; text-align: center; font-weight: bold; animation: blink 1s step-end infinite; margin-left: 2px; }
 
         @keyframes blink { 50% { opacity: 0; } }
 
@@ -62,11 +62,19 @@
 <body>
 
 <div id="emulator-container">
-    <h1 style="color: #ccc;">ZX Spectrum Emulator</h1>
+    <h1 style="color: #ccc; margin-bottom: 5px;">ZX Spectrum Emulator</h1>
+    <div id="wasm-status" style="color: #888; font-size: 14px; margin-bottom: 15px;">
+        Wachten op WASM module...
+    </div>
+
     <div id="console-output"></div>
-    <div id="input-line">
-        <span id="typed-text"></span>
-        <div id="cursor">K</div>
+
+    <div id="system-area">
+        <div id="system-message"></div>
+        <div id="input-line">
+            <span id="typed-text"></span>
+            <div id="cursor">K</div>
+        </div>
     </div>
 </div>
 
@@ -168,14 +176,18 @@
     let cursorMode = 'K'; // Start altijd in Keyword modus
 
     var Module = {
-        print: function(text) { appendOutput(text, "stdout"); },
-        printErr: function(text) { appendOutput(text, "error"); },
+        //print: function(text) { appendOutput(text, "stdout"); },
+        //printErr: function(text) { appendOutput(text, "error"); },
         onRuntimeInitialized: function() { initEmulator(); }
     };
 
     function initEmulator() {
+        // Bevestig dat de C-motor draait!
+        document.getElementById("wasm-status").textContent = "ZX Spectrum BASIC WASM Module Geladen. v0.2.6";
+
         spectrumMachinePointer = Module.ccall('UI_machine_create', 'number', [], []);
-        appendOutput("ZX Spectrum gereed.", "stdout");
+
+        renderScreens();
         updateDisplay();
     }
 
@@ -277,17 +289,43 @@
         // Vertaal het ASCII-getal (bijv. 75) terug naar een letter ('K') en zet de modus
         setMode(String.fromCharCode(modeAscii));
     }
+    function renderScreens() {
+        if (!spectrumMachinePointer) return;
 
+        // --- 1. HOOFDSCHERM (22 regels x 32 karakters = 704 bytes) ---
+        const textPtr = Module.ccall('UI_get_text_screen', 'number', ['number'], [spectrumMachinePointer]);
+        if (textPtr) {
+            let textOutput = "";
+            for (let i = 0; i < 704; i++) {
+                // Lees 1 byte uit het C-geheugen
+                let charCode = Module.HEAPU8[textPtr + i];
+                textOutput += String.fromCharCode(charCode);
+
+                // Elke 32 tekens forceren we een enter voor de HTML opmaak
+                if ((i + 1) % 32 === 0) {
+                    textOutput += "\n";
+                }
+            }
+            document.getElementById("console-output").textContent = textOutput;
+        }
+
+        // --- 2. SYSTEEMSCHERM (2 regels x 32 karakters = 64 bytes) ---
+        const sysPtr = Module.ccall('UI_get_system_screen', 'number', ['number'], [spectrumMachinePointer]);
+        if (sysPtr) {
+            let sysOutput = "";
+            // We lezen hier alleen de eerste 32 bytes (regel 1), want regel 2 is voor je eigen typ-invoer
+            for (let i = 0; i < 32; i++) {
+                let charCode = Module.HEAPU8[sysPtr + i];
+                sysOutput += String.fromCharCode(charCode);
+            }
+            document.getElementById("system-message").textContent = sysOutput;
+        }
+    }
     // --- DE WASM GEHEUGEN KOPPELING ---
     function executeBuffer() {
         if (inputBytes.length === 0) return;
 
-        // 1. Print het commando mét een extra enter erachter, zodat de
-        //    output van C netjes op een schone regel begint.
-        const formattedText = getFormattedLine(inputBytes);
-        appendOutput("> " + formattedText, "stdout");
-
-        // 2. Reserveer geheugen in de WASM wereld en stuur naar de parser
+        // 1. Stuur de bytes naar de C-parser
         const bufferPtr = Module._malloc(inputBytes.length);
         Module.HEAPU8.set(inputBytes, bufferPtr);
 
@@ -299,23 +337,16 @@
         );
         Module._free(bufferPtr);
 
-        // 3. Reset de UI voor de volgende regel
+        // 2. Haal de verversde videobuffers op uit C en teken ze!
+        renderScreens();
+
+        // 3. Wist de invoerregel in de HTML
         inputBytes = [];
         setMode('K');
         updateDisplay();
     }
 
-    function appendOutput(text, className) {
-        const consoleDiv = document.getElementById("console-output");
-        const span = document.createElement("span");
-        span.style.color = className === "error" ? "#f55" : "#0f0";
 
-        // DE FIX: Emscripten stal de \n, dus wij plakken hem er hier gewoon weer achter!
-        span.textContent = text + "\n";
-
-        consoleDiv.appendChild(span);
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
-    }
 </script>
 <script src="zx_basic.js"></script>
 

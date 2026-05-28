@@ -22,13 +22,13 @@
 
 ZxError formatted_number(const double number, char *out_string, const size_t out_string_size) {
     if (out_string == NULL || out_string_size == 0) {
-        return ERR_INVALID_ARGUMENT;
+        return ERR_UNKNOWN;
     }
 
     // Spectrum Rule: 0 is printed as a single digit 0
     if (number == 0.0f) {
         snprintf(out_string, out_string_size, "0");
-        return ERR_OK;
+        return ERR_0_OK;
     }
 
     // Pak de absolute waarde om de wetenschappelijke drempel veilig te testen
@@ -38,11 +38,11 @@ ZxError formatted_number(const double number, char *out_string, const size_t out
     if (abs_num <= 1e-5f || abs_num >= 1e13f) {
         int n = snprintf(out_string, out_string_size, "%.7E", number);
         if (n < 0 || (size_t)n >= out_string_size) {
-            return ERR_INVALID_ARGUMENT;
+            return ERR_A_INVALID_ARGUMENT;
         }
 
         char *e = strchr(out_string, 'E');
-        if (!e) return ERR_OK;
+        if (!e) return ERR_0_OK;
 
         char *p = e - 1;
         while (p > out_string && *p == '0') {
@@ -52,7 +52,7 @@ ZxError formatted_number(const double number, char *out_string, const size_t out
             --p;
         }
         memmove(p + 1, e, strlen(e) + 1);
-        return ERR_OK;
+        return ERR_0_OK;
     }
 
     // Spectrum Rule: Gewone notatie met max 8 *significante* cijfers
@@ -63,7 +63,7 @@ ZxError formatted_number(const double number, char *out_string, const size_t out
 
     int n = snprintf(out_string, out_string_size, "%.*f", precision, number);
     if (n < 0 || (size_t)n >= out_string_size) {
-        return ERR_INVALID_ARGUMENT;
+        return ERR_A_INVALID_ARGUMENT;
     }
 
     // Sloop overtollige nullen weg (ALLEEN als er een komma in het getal zit!)
@@ -88,7 +88,7 @@ ZxError formatted_number(const double number, char *out_string, const size_t out
         memmove(out_string + 1, out_string + 2, strlen(out_string) - 1);
     }
 
-    return ERR_OK;
+    return ERR_0_OK;
 }
 char *format_double(const double number) {
     char *out_string = malloc(32);
@@ -96,7 +96,7 @@ char *format_double(const double number) {
         return NULL;
     }
     ZxError err = formatted_number(number, out_string, 32);
-    if (err != ERR_OK) {
+    if (err != ERR_0_OK) {
         free(out_string);
         return NULL;
     }
@@ -109,7 +109,7 @@ ZxError make_double(const char *text, double *out_double) {
     const double value = strtod(text, &end);
 
     if (end == text) {
-        return ERR_INVALID_NUMBER; // geen geldig getal gevonden
+        return ERR_C_NONSENS_IN_BASIC; // geen geldig getal gevonden
     }
 
     while (*end == ' ') {
@@ -117,17 +117,17 @@ ZxError make_double(const char *text, double *out_double) {
     }
 
     if (*end != '\0') {
-        return ERR_INVALID_EXPRESSION; // resttekst na het getal
+        return ERR_C_NONSENS_IN_BASIC; // resttekst na het getal
     }
 
     if (errno == ERANGE) {
-        return ERR_OUT_OF_RANGE; // buiten bereik
+        return ERR_6_NUMBER_TOO_BIG; // buiten bereik
     }
 
     if (out_double != NULL) {
         *out_double = value;
     }
-    return ERR_OK;
+    return ERR_0_OK;
 }
 ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size, char *number_string, const size_t result_size, size_t *bytes_read) {
     size_t i = 0;
@@ -149,20 +149,20 @@ ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size
             char result[result_size];
             double value;
             ZxError err = make_double(number_string, &value);
-            if (err != ERR_OK) {
+            if (err != ERR_0_OK) {
                 return err;
             }
             err = formatted_number(value, result, result_size);
-            if (err != ERR_OK) {
+            if (err != ERR_0_OK) {
                 return err;
             }
             *bytes_read = i;
             strncpy(number_string, result, result_size);
-            return ERR_OK;
+            return ERR_0_OK;
         }
-        return ERR_INVALID_EXPRESSION;
+        return ERR_C_NONSENS_IN_BASIC;
     }
-    return ERR_INVALID_EXPRESSION;
+    return ERR_C_NONSENS_IN_BASIC;
 }
 
 ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, const size_t result_size, size_t *bytes_read) {
@@ -185,17 +185,17 @@ ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size
             char result[result_size];
             double value;
             ZxError err = make_double(number_string, &value);
-            if (err != ERR_OK) {
+            if (err != ERR_0_OK) {
                 return err;
             }
             *number = value;
             *bytes_read = i;
-            return ERR_OK;
+            return ERR_0_OK;
 
         }
-        return ERR_INVALID_EXPRESSION;
+        return ERR_C_NONSENS_IN_BASIC;
     }
-    return ERR_INVALID_EXPRESSION;
+    return ERR_C_NONSENS_IN_BASIC;
 
 }
 
@@ -220,23 +220,23 @@ ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, 
                 }
                 literal[len] = '\0';
                 *bytes_read = i + 1;
-                return ERR_OK;
+                return ERR_0_OK;
             }
             if (!is_zx_printable_character(expression[i])) {
-                return ERR_INVALID_STRING_LITERAL;
+                return ERR_A_INVALID_ARGUMENT;
             }
             literal[len] = *get_content_from_token(expression[i]);
             len++;
             i++;
         }
-        return ERR_UNCLOSED_QUOTES;
+        return ERR_A_INVALID_ARGUMENT;
     }
-    return ERR_INVALID_STRING_LITERAL;
+    return ERR_A_INVALID_ARGUMENT;
 }
 ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expression_size, char *literal, const size_t result_size) {
     size_t bytes_read;
     const ZxError err = parse_string_literal(expression, expression_size, literal, result_size, &bytes_read);
-    if (err != ERR_OK) {
+    if (err != ERR_0_OK) {
         return err;
     }
 
@@ -261,7 +261,7 @@ ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expre
         }
     }
     literal[0] = '"';
-    return ERR_OK;
+    return ERR_0_OK;
 }
 
 ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, char *variable_name, size_t *bytes_read) {
@@ -270,7 +270,7 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
         i++;
     }
     if (i == expression_size) {
-        return ERR_SYNTAX_ERROR;
+        return ERR_2_VARIABLE_NOT_FOUND;
     }
 
     if (is_zx_alpha(expression[i]) && i < expression_size - 1) {
@@ -278,7 +278,7 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
             variable_name[0] = *get_content_from_token(expression[i]);
             variable_name[1] = '$';
             variable_name[2] = '\0';
-            return ERR_NOT_IMPLEMENTED; //TODO implement string variables
+            return ERR_NOT_YET_IMPLEMENTED; //TODO implement string variables
         }
     }
     size_t len = 0;
@@ -292,6 +292,6 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
 
     *bytes_read = i;
 
-    return ERR_OK;
+    return ERR_0_OK;
 
 }

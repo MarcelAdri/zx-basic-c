@@ -1739,6 +1739,9 @@ var _UI_machine_create = Module['_UI_machine_create'] = makeInvalidEarlyAccess('
 var _UI_machine_destroy = Module['_UI_machine_destroy'] = makeInvalidEarlyAccess('_UI_machine_destroy');
 var _UI_translate_keypress = Module['_UI_translate_keypress'] = makeInvalidEarlyAccess('_UI_translate_keypress');
 var _UI_get_keyword_for_token = Module['_UI_get_keyword_for_token'] = makeInvalidEarlyAccess('_UI_get_keyword_for_token');
+var _UI_get_text_screen = Module['_UI_get_text_screen'] = makeInvalidEarlyAccess('_UI_get_text_screen');
+var _UI_get_machine_state = Module['_UI_get_machine_state'] = makeInvalidEarlyAccess('_UI_get_machine_state');
+var _UI_get_system_screen = Module['_UI_get_system_screen'] = makeInvalidEarlyAccess('_UI_get_system_screen');
 var _UI_format_zx_line = Module['_UI_format_zx_line'] = makeInvalidEarlyAccess('_UI_format_zx_line');
 var _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = makeInvalidEarlyAccess('_UI_get_cursor_mode');
 var _run_basic_line = Module['_run_basic_line'] = makeInvalidEarlyAccess('_run_basic_line');
@@ -1763,6 +1766,9 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['UI_machine_destroy'] != 'undefined', 'missing Wasm export: UI_machine_destroy');
   assert(typeof wasmExports['UI_translate_keypress'] != 'undefined', 'missing Wasm export: UI_translate_keypress');
   assert(typeof wasmExports['UI_get_keyword_for_token'] != 'undefined', 'missing Wasm export: UI_get_keyword_for_token');
+  assert(typeof wasmExports['UI_get_text_screen'] != 'undefined', 'missing Wasm export: UI_get_text_screen');
+  assert(typeof wasmExports['UI_get_machine_state'] != 'undefined', 'missing Wasm export: UI_get_machine_state');
+  assert(typeof wasmExports['UI_get_system_screen'] != 'undefined', 'missing Wasm export: UI_get_system_screen');
   assert(typeof wasmExports['UI_format_zx_line'] != 'undefined', 'missing Wasm export: UI_format_zx_line');
   assert(typeof wasmExports['UI_get_cursor_mode'] != 'undefined', 'missing Wasm export: UI_get_cursor_mode');
   assert(typeof wasmExports['run_basic_line'] != 'undefined', 'missing Wasm export: run_basic_line');
@@ -1784,6 +1790,9 @@ function assignWasmExports(wasmExports) {
   _UI_machine_destroy = Module['_UI_machine_destroy'] = createExportWrapper('UI_machine_destroy', 1);
   _UI_translate_keypress = Module['_UI_translate_keypress'] = createExportWrapper('UI_translate_keypress', 2);
   _UI_get_keyword_for_token = Module['_UI_get_keyword_for_token'] = createExportWrapper('UI_get_keyword_for_token', 1);
+  _UI_get_text_screen = Module['_UI_get_text_screen'] = createExportWrapper('UI_get_text_screen', 1);
+  _UI_get_machine_state = Module['_UI_get_machine_state'] = createExportWrapper('UI_get_machine_state', 1);
+  _UI_get_system_screen = Module['_UI_get_system_screen'] = createExportWrapper('UI_get_system_screen', 1);
   _UI_format_zx_line = Module['_UI_format_zx_line'] = createExportWrapper('UI_format_zx_line', 2);
   _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = createExportWrapper('UI_get_cursor_mode', 2);
   _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 3);

@@ -7,23 +7,33 @@
 #include "characters.h"
 #include "errors.h"
 
-static ZxError zx_function_abs(const double argument, double *result) {
-    *result = argument < 0 ? -argument : argument;
-    return ERR_0_OK;
+static ZxError zx_function_abs(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double res = arg < 0 ? -arg : arg;
+
+    return zx_assign_number(res, result);
 
 }
 
-ZxError zx_num_function_call(const uint8_t function, const double num_argument, const char *string_arg, double *result) {
-    if (result == NULL) {
-        return ERR_UNKNOWN;
+ZxError zx_function_call(const uint8_t function, const ZxValue argument, ZxValue *result) {
+    if ((is_num_function_num_arg(function) ||
+        is_string_function_num_argument(function)) &&
+        argument.type != ZX_TYPE_NUMBER) {
+        return ERR_A_INVALID_ARGUMENT;
     }
-    if (is_num_function_str_arg(function) && string_arg == NULL) {
+    if ((is_num_function_str_arg(function) ||
+        is_string_function_str_argument(function)) &&
+        argument.type != ZX_TYPE_STRING) {
         return ERR_A_INVALID_ARGUMENT;
     }
 
     switch (function) {
         case 189:  //ABS
-            return zx_function_abs(num_argument, result);
+            return zx_function_abs(argument, result);
 
     }
 

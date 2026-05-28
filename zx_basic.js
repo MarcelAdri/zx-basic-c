@@ -1745,6 +1745,7 @@ var _UI_get_system_screen = Module['_UI_get_system_screen'] = makeInvalidEarlyAc
 var _UI_format_zx_line = Module['_UI_format_zx_line'] = makeInvalidEarlyAccess('_UI_format_zx_line');
 var _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = makeInvalidEarlyAccess('_UI_get_cursor_mode');
 var _run_basic_line = Module['_run_basic_line'] = makeInvalidEarlyAccess('_run_basic_line');
+var _UI_get_version = Module['_UI_get_version'] = makeInvalidEarlyAccess('_UI_get_version');
 var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
 var _fflush = makeInvalidEarlyAccess('_fflush');
 var _strerror = makeInvalidEarlyAccess('_strerror');
@@ -1772,6 +1773,7 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['UI_format_zx_line'] != 'undefined', 'missing Wasm export: UI_format_zx_line');
   assert(typeof wasmExports['UI_get_cursor_mode'] != 'undefined', 'missing Wasm export: UI_get_cursor_mode');
   assert(typeof wasmExports['run_basic_line'] != 'undefined', 'missing Wasm export: run_basic_line');
+  assert(typeof wasmExports['UI_get_version'] != 'undefined', 'missing Wasm export: UI_get_version');
   assert(typeof wasmExports['main'] != 'undefined', 'missing Wasm export: main');
   assert(typeof wasmExports['fflush'] != 'undefined', 'missing Wasm export: fflush');
   assert(typeof wasmExports['strerror'] != 'undefined', 'missing Wasm export: strerror');
@@ -1796,6 +1798,7 @@ function assignWasmExports(wasmExports) {
   _UI_format_zx_line = Module['_UI_format_zx_line'] = createExportWrapper('UI_format_zx_line', 2);
   _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = createExportWrapper('UI_get_cursor_mode', 2);
   _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 3);
+  _UI_get_version = Module['_UI_get_version'] = createExportWrapper('UI_get_version', 0);
   _main = Module['_main'] = createExportWrapper('main', 2);
   _fflush = createExportWrapper('fflush', 1);
   _strerror = createExportWrapper('strerror', 1);

@@ -34,6 +34,9 @@ bool is_num_function_num_arg(uint8_t c);
 bool is_num_function_no_arg(uint8_t c);
 bool is_num_function_str_arg(uint8_t c);
 bool is_num_function(uint8_t c);
+bool is_string_function_no_argument(uint8_t c);
+bool is_string_function_str_argument(uint8_t c);
+bool is_string_function_num_argument(uint8_t c);
 bool is_string_function(uint8_t c);
 bool is_function(uint8_t c);
 

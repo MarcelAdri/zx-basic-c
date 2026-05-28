@@ -51,10 +51,6 @@ double parse_expression(ParserContext *ctx) {
             left_value -= right_value;
         }
     }
-    if (left_value > 1.7e38 || left_value < -1.7e38) {
-        ctx->last_error = ERR_6_NUMBER_TOO_BIG;
-        return 0;
-    }
     ctx->last_error = ERR_0_OK;
     return left_value;
 }
@@ -75,16 +71,8 @@ double parse_term(ParserContext *ctx) {
             left_value *= right_value;
         }
         if (is_zx_slash_character(operator)) {
-            if (right_value == 0) {
-                ctx->last_error = ERR_6_NUMBER_TOO_BIG;
-                return 0;
-            }
             left_value /= right_value;
         }
-    }
-    if (left_value > 1.7e38 || left_value < -1.7e38) {
-        ctx->last_error = ERR_6_NUMBER_TOO_BIG;
-        return 0;
     }
     ctx->last_error = ERR_0_OK;
     return left_value;
@@ -102,23 +90,7 @@ double parse_power(ParserContext *ctx) {
             return 0;
         }
         if (is_zx_power_character(operator)) {
-            if (left_value == 0.0 && right_value < 0.0) {
-                ctx->last_error = ERR_A_INVALID_ARGUMENT;
-                return 0; // Stop direct
-            }
-            if (left_value < 0 && floor(right_value) != right_value) {
-                ctx->last_error = ERR_A_INVALID_ARGUMENT; // Wiskundige fout
-                return 0;
-            }
             left_value = pow(left_value, right_value);
-            if (left_value > 1.7e38 || left_value < -1.7e38 || isinf(left_value)) {
-                ctx->last_error = ERR_6_NUMBER_TOO_BIG;
-                return 0;
-            }
-            if (isnan(left_value)) {
-                ctx->last_error = ERR_A_INVALID_ARGUMENT;
-                return 0;
-            }
             ctx->last_error = ERR_0_OK;
             return left_value;
         }
@@ -138,7 +110,7 @@ double parse_factor(ParserContext *ctx) {
             return 0;
         }
         if (ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
-            ctx->last_error = ERR_C_NONSENS_IN_BASIC;
+            ctx->last_error = ERR_C_NONSENSE_IN_BASIC;
             return 0;
         }
         ctx->cursor++;
@@ -162,12 +134,26 @@ double parse_factor(ParserContext *ctx) {
 
     if (is_num_function_num_arg(token)) {
         ctx->cursor++;
-        double argument = parse_expression(ctx);
+        double argument = parse_factor(ctx);
         if (ctx->last_error != ERR_0_OK) {
             return 0;
         }
+        ZxValue arg;
+        zx_init_value(&arg);
+        err = zx_assign_number(argument, &arg);
+        if (err != ERR_0_OK) {
+            ctx->last_error = err;
+            return 0;
+        }
+        ZxValue zx_value;
+        zx_init_value(&zx_value);
+        err = zx_function_call(token, arg, &zx_value);
+        if (err != ERR_0_OK) {
+            ctx->last_error = err;
+            return 0;
+        }
         double value;
-        err = zx_num_function_call(token, argument, NULL, &value);
+        err = zx_get_number(zx_value, &value);
         if (err != ERR_0_OK) {
             ctx->last_error = err;
             return 0;
@@ -177,8 +163,17 @@ double parse_factor(ParserContext *ctx) {
     }
     if (is_num_function_no_arg(token)) {
         ctx->cursor++;
+        ZxValue zx_value;
+        zx_init_value(&zx_value);
+        ZxValue arg;
+        zx_init_value(&arg);
+        err = zx_function_call(token, arg, &zx_value);
+        if (err != ERR_0_OK) {
+            ctx->last_error = err;
+            return 0;
+        }
         double value;
-        err = zx_num_function_call(token, 0, NULL, &value);
+        err = zx_get_number(zx_value, &value);
         if (err != ERR_0_OK) {
             ctx->last_error = err;
             return 0;
@@ -188,14 +183,24 @@ double parse_factor(ParserContext *ctx) {
     }
     if (is_num_function_str_arg(token)) {
         ctx->cursor++;
-        char string_arg[2048];
-        err = parse_string_literal_with_quotes(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, string_arg, 2048);
+        ZxValue arg;
+        zx_init_value(&arg);
+        err = zx_assign_string(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, &arg);
+        if (err != ERR_0_OK) {
+            ctx->last_error = err;
+            zx_free_string(&arg);
+            return 0;
+        }
+        ZxValue zx_value;
+        zx_init_value(&zx_value);
+        err = zx_function_call(token, arg, &zx_value);
+        zx_free_string(&arg);
         if (err != ERR_0_OK) {
             ctx->last_error = err;
             return 0;
         }
         double value;
-        err = zx_num_function_call(token, 0, string_arg, &value);
+        err = zx_get_number(zx_value, &value);
         if (err != ERR_0_OK) {
             ctx->last_error = err;
             return 0;
@@ -217,6 +222,8 @@ double parse_factor(ParserContext *ctx) {
     }
     if (is_zx_alpha(token)) {
         double value;
+        ZxValue zx_value;
+        zx_init_value(&zx_value);
         char variable_name[MAX_VAR_NAME_LEN];
         size_t bytes_read;
         err = parse_variable_name(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, variable_name, &bytes_read);
@@ -225,7 +232,12 @@ double parse_factor(ParserContext *ctx) {
             return 0;
         }
         ctx->cursor += bytes_read;
-        err = machine_get_numeric(ctx->machine, variable_name, &value);
+        err = machine_get_numeric(ctx->machine, variable_name, &zx_value);
+        if (err != ERR_0_OK) {
+            ctx->last_error = err;
+            return 0;
+        }
+        err = zx_get_number(zx_value, &value);
         if (err != ERR_0_OK) {
             ctx->last_error = err;
             return 0;
@@ -233,12 +245,12 @@ double parse_factor(ParserContext *ctx) {
         ctx->last_error = ERR_0_OK;
         return value;
     }
-    ctx->last_error = ERR_C_NONSENS_IN_BASIC;
+    ctx->last_error = ERR_C_NONSENSE_IN_BASIC;
     return 0;
 }
 
 
-ZxError solve_expression_to_double(ZxMachine machine, const uint8_t *expression, size_t expression_size, double *result, const size_t result_size, size_t *bytes_read) {
+ZxError solve_expression_to_number(ZxMachine machine, const uint8_t *expression, size_t expression_size, ZxValue *result, const size_t result_size, size_t *bytes_read) {
     ZxError err;
     ParserContext ctx = {0};
     ctx.machine = machine;
@@ -253,9 +265,7 @@ ZxError solve_expression_to_double(ZxMachine machine, const uint8_t *expression,
     if (bytes_read != NULL) {
         *bytes_read = ctx.cursor;
     }
-    *result = value;
-    return ERR_0_OK;
-
+    return zx_assign_number(value, result);
 }
 
 ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression, size_t expression_size, char *result, const size_t result_size, size_t *bytes_read) {
@@ -280,7 +290,13 @@ ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression,
             return err;
         }
         double value;
-        err = machine_get_numeric(machine, variable_name, &value);
+        ZxValue zx_value;
+        zx_init_value(&zx_value);
+        err = machine_get_numeric(machine, variable_name, &zx_value);
+        if (err != ERR_0_OK) {
+            return err;
+        }
+        err = zx_get_number(zx_value, &value);
         if (err != ERR_0_OK) {
             return err;
         }
@@ -295,7 +311,13 @@ ZxError solve_expression_to_string(ZxMachine machine, const uint8_t *expression,
     }
 
     double value;
-    err = solve_expression_to_double(machine, expression, expression_size, &value, 32, bytes_read);
+    ZxValue zx_value;
+    zx_init_value(&zx_value);
+    err = solve_expression_to_number(machine, expression, expression_size, &zx_value, 32, bytes_read);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    err = zx_get_number(zx_value, &value);
     if (err != ERR_0_OK) {
         return err;
     }

@@ -109,7 +109,7 @@ ZxError make_double(const char *text, double *out_double) {
     const double value = strtod(text, &end);
 
     if (end == text) {
-        return ERR_C_NONSENS_IN_BASIC; // geen geldig getal gevonden
+        return ERR_C_NONSENSE_IN_BASIC; // geen geldig getal gevonden
     }
 
     while (*end == ' ') {
@@ -117,7 +117,7 @@ ZxError make_double(const char *text, double *out_double) {
     }
 
     if (*end != '\0') {
-        return ERR_C_NONSENS_IN_BASIC; // resttekst na het getal
+        return ERR_C_NONSENSE_IN_BASIC; // resttekst na het getal
     }
 
     if (errno == ERANGE) {
@@ -160,9 +160,9 @@ ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size
             strncpy(number_string, result, result_size);
             return ERR_0_OK;
         }
-        return ERR_C_NONSENS_IN_BASIC;
+        return ERR_C_NONSENSE_IN_BASIC;
     }
-    return ERR_C_NONSENS_IN_BASIC;
+    return ERR_C_NONSENSE_IN_BASIC;
 }
 
 ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, const size_t result_size, size_t *bytes_read) {
@@ -193,9 +193,9 @@ ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size
             return ERR_0_OK;
 
         }
-        return ERR_C_NONSENS_IN_BASIC;
+        return ERR_C_NONSENSE_IN_BASIC;
     }
-    return ERR_C_NONSENS_IN_BASIC;
+    return ERR_C_NONSENSE_IN_BASIC;
 
 }
 

@@ -21,7 +21,8 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     uint8_t expr[256] = {0};
     char var_name[MAX_VAR_NAME_LEN];
     ZxError err;
-    double value;
+    ZxValue value;
+    zx_init_value(&value);
     size_t name_size = 0;
     size_t expr_size = 0;
     for (size_t i = 1; i < output_size; i++) {
@@ -51,7 +52,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
         return ERR_2_VARIABLE_NOT_FOUND;
     }
     size_t bytes_read;
-    err = solve_expression_to_double(machine,
+    err = solve_expression_to_number(machine,
         expr, expr_size, &value, 255, &bytes_read);
     if (err != ERR_0_OK) {
         return err;
@@ -112,7 +113,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             cursor++;
         }
         else {
-            return ERR_C_NONSENS_IN_BASIC;
+            return ERR_C_NONSENSE_IN_BASIC;
         }
     }
 

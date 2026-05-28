@@ -622,9 +622,28 @@ bool is_num_function_str_arg(const uint8_t c) {
 bool is_num_function(const uint8_t c) {
     return is_num_function_num_arg(c) || is_num_function_no_arg(c) || is_num_function_str_arg(c);
 }
+bool is_string_function_no_argument(const uint8_t c) {
+    if (c == 166) {   //INKEY$
+        return true;
+    }
+    return false;
+}
+bool is_string_function_str_argument(const uint8_t c) {
+    if (c == 174) {  //VAL$
+        return true;
+    }
+    return false;
+}
+bool is_string_function_num_argument(const uint8_t c) {
+    if (c == 193 || //STR$
+        c == 194) { //CHR$
+        return true;
+    }
+    return false;
+}
 bool is_string_function(const uint8_t c) {
-    return true; //TODO: implement
+    return is_string_function_no_argument(c) || is_string_function_str_argument(c) || is_string_function_num_argument(c);
 }
 bool is_function(const uint8_t c) {
-    return is_num_function_num_arg(c) || is_string_function(c);
+    return is_num_function(c) || is_string_function(c);
 }

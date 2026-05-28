@@ -182,8 +182,19 @@
     };
 
     function initEmulator() {
-        // Bevestig dat de C-motor draait!
-        document.getElementById("wasm-status").textContent = "ZX Spectrum BASIC WASM Module Geladen. v0.2.6";
+        // 1. Haal de pointer naar de versiestring op uit C
+        const versionPtr = Module.ccall('UI_get_version', 'number', [], []);
+
+        // 2. We lezen het geheugen byte voor byte uit, totdat we de '0' (null-terminator) tegenkomen!
+        let versionStr = "";
+        let i = 0;
+        while (Module.HEAPU8[versionPtr + i] !== 0) {
+            versionStr += String.fromCharCode(Module.HEAPU8[versionPtr + i]);
+            i++;
+        }
+
+        // 3. Update de statusbalk dynamisch
+        document.getElementById("wasm-status").textContent = "ZX Spectrum BASIC WASM Module Geladen. v" + versionStr;
 
         spectrumMachinePointer = Module.ccall('UI_machine_create', 'number', [], []);
 

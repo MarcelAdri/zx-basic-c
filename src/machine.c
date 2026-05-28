@@ -9,12 +9,13 @@
 #include <stdint.h>
 #include "machine.h"
 #include "errors.h"
+#include "zx_types.h"
 
 #define NOT_FOUND (-1)
 
 typedef struct {
     char name[MAX_VAR_NAME_LEN];       // We reserveren max. 99 tekens voor de naam (+ '\0')
-    double value;
+    ZxValue value;
 } NumericVariable;
 
 typedef enum {
@@ -37,11 +38,7 @@ typedef struct Machine {
     uint16_t current_line;
     uint8_t current_statement;
 
-    double loop_counters[26];
-    bool loop_counter_defined[26];
-
-    char string_variables[26][256];
-    bool string_variable_defined[26];
+    ZxValue string_variables[26];
 
     NumericVariable *numeric_vars;
     int numeric_variable_count;
@@ -81,11 +78,15 @@ static int get_numeric_variable_index(ZxMachine machine, const char *var_name, c
 
 ZxMachine machine_create(void) {
     Machine* machine = malloc(sizeof(Machine));
+    memset(machine, 0, sizeof(Machine));
+
     if (machine == NULL) {
         return NULL;
     }
 
-    memset(machine, 0, sizeof(Machine));
+    for (int i = 0; i < 26; i++) {
+        zx_init_value(&machine->string_variables[i]);
+    }
 
     machine->text_cursor_x = 0;
     machine->text_cursor_y = 0;
@@ -122,36 +123,53 @@ uint16_t machine_get_current_line(ZxMachine machine) {
 uint8_t machine_get_current_statement(ZxMachine machine) {
     return machine ? machine->current_statement : 1;
 }
-ZxError machine_set_numeric(ZxMachine machine, const char *var_name, double value) {
+ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value) {
+    if (machine == NULL || var_name == NULL) {
+        return ERR_UNKNOWN;
+    }
+    if (value.type != ZX_TYPE_NUMBER) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
     int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
     if (i != NOT_FOUND) {
-        machine->numeric_vars[i].value = value;
-        return ERR_0_OK;
+        return zx_assign_number(value.data.number, &machine->numeric_vars[i].value);
     }
 
     if (machine->numeric_variable_count >= machine->numeric_variable_capacity) {
         machine->numeric_variable_capacity *= 2;
         machine->numeric_vars = realloc(machine->numeric_vars, machine->numeric_variable_capacity * sizeof(NumericVariable));
         if (machine->numeric_vars == NULL) {
-            return ERR_UNKNOWN;
+            return ERR_4_OUT_OF_MEMORY;
         }
     }
     const int nieuw_index = machine->numeric_variable_count;
 
     strncpy(machine->numeric_vars[nieuw_index].name, var_name, MAX_VAR_NAME_LEN - 1);
     machine->numeric_vars[nieuw_index].name[MAX_VAR_NAME_LEN - 1] = '\0';
-    machine->numeric_vars[nieuw_index].value = value;
+    zx_init_value(&machine->numeric_vars[nieuw_index].value);
 
-    machine->numeric_variable_count++;
+    ZxError err = zx_assign_number(value.data.number, &machine->numeric_vars[nieuw_index].value);
 
-    return ERR_0_OK;
+    if (err == ERR_0_OK) {
+        machine->numeric_variable_count++;
+    }
+
+    return err;
 }
 
-ZxError machine_get_numeric(ZxMachine machine, const char *var_name, double *value) {
+ZxError machine_get_numeric(ZxMachine machine, const char *var_name, ZxValue *value) {
+    if (machine == NULL || var_name == NULL || value == NULL) {
+        return ERR_UNKNOWN;
+    }
+
     int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
     if (i != NOT_FOUND) {
-        *value = machine->numeric_vars[i].value;
-        return ERR_0_OK;
+
+        if (machine->numeric_vars[i].value.type != ZX_TYPE_NUMBER) {
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+
+        return zx_assign_number(machine->numeric_vars[i].value.data.number, value);
     }
     return ERR_2_VARIABLE_NOT_FOUND;
 }
@@ -159,6 +177,9 @@ ZxError machine_get_numeric(ZxMachine machine, const char *var_name, double *val
 void machine_destroy(ZxMachine machine) {
     if (machine != NULL) {
         // Ruim eerst de dynamische array binnenin op
+        for (int i = 0; i < 26; i++) {
+            zx_free_string(&machine->string_variables[i]);
+        }
         if (machine->numeric_vars != NULL) {
             free(machine->numeric_vars);
         }

@@ -93,6 +93,10 @@ void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
     // 4. Stuur hem naar het systeem-scherm
     machine_print_to_system(machine, sys_msg);
 }
+EMSCRIPTEN_KEEPALIVE
+const char* UI_get_version(void) {
+    return ZX_BASIC_VERSION;
+}
 
 int main(void) {
     printf("ZX Spectrum BASIC WASM Module Geladen. v%s\n", ZX_BASIC_VERSION);

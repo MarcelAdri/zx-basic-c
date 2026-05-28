@@ -5,6 +5,7 @@
 #ifndef ZX_BASIC_C_MACHINE_H
 #define ZX_BASIC_C_MACHINE_H
 #include "errors.h"
+#include "zx_types.h"
 
 #define MAX_VAR_NAME_LEN 100
 #define MAX_TEXT_SENTENCE_LEN 256
@@ -14,8 +15,8 @@ typedef struct Machine* ZxMachine;
 typedef void (*ZxPrintCallback)(const char *text);
 
 ZxMachine machine_create(void);
-ZxError machine_set_numeric(ZxMachine machine, const char *var_name, double value);
-ZxError machine_get_numeric(ZxMachine machine, const char *var_name, double *value);
+ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value);
+ZxError machine_get_numeric(ZxMachine machine, const char *var_name, ZxValue *value);
 uint8_t machine_get_text_cursor_x(ZxMachine machine);
 uint8_t machine_get_text_cursor_y(ZxMachine machine);
 const uint8_t* machine_get_text_screen(ZxMachine machine);

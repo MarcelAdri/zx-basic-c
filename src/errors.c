@@ -25,7 +25,7 @@ const char *get_zx_error_message(const ZxError error) {
         case ERR_9_STOP: return "9 STOP statement";
         case ERR_A_INVALID_ARGUMENT: return "A Invalid argument";
         case ERR_B_INTEGER_OUT_OF_RANGE: return "B Integer out of range";
-        case ERR_C_NONSENS_IN_BASIC: return "C Nonsense in BASIC";
+        case ERR_C_NONSENSE_IN_BASIC: return "C Nonsense in BASIC";
         case ERR_D_BREAK: return "D BREAK - CONT repeats";
         case ERR_E_OUT_OF_DATA: return "E Out of data";
         case ERR_F_INVALID_FILENAME: return "F Invalid filename";

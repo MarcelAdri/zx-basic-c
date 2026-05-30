@@ -315,7 +315,11 @@ ZxError solve_expression(ZxMachine machine, const uint8_t *expression, size_t ex
     if (is_zx_alpha(expression[i])) {
 
         if (i + 1 < expression_size && expression[i + 1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
-            return ERR_NOT_YET_IMPLEMENTED;
+            if (bytes_read != NULL) {
+                // Tel de overgeslagen spaties op bij de gelezen string bytes
+                *bytes_read = i + 2;
+            }
+            return machine_get_string(machine, expression[i], result);
         }
     }
 

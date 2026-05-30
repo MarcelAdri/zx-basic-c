@@ -175,7 +175,39 @@ ZxError machine_get_numeric(ZxMachine machine, const char *var_name, ZxValue *va
     }
     return ERR_2_VARIABLE_NOT_FOUND;
 }
+ZxError machine_set_string(ZxMachine machine, const uint8_t var_name, ZxValue *value) {
+    if (machine == NULL || value == NULL) {
+        return ERR_UNKNOWN;
+    }
 
+    int i = name_to_index(var_name);
+    if (i != NOT_FOUND) {
+        if (value->type != ZX_TYPE_STRING) {
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+        machine->string_variables[i] = *value;
+        return ERR_0_OK;
+    }
+    return ERR_F_INVALID_FILENAME;
+}
+ZxError machine_get_string(ZxMachine machine, const uint8_t var_name, ZxValue *value) {
+    if (machine == NULL || value == NULL) {
+        return ERR_UNKNOWN;
+    }
+
+    int i = name_to_index(var_name);
+
+    if (i != NOT_FOUND) {
+        zx_assign_string(machine->string_variables[i].data.string.text,
+                 machine->string_variables[i].data.string.length,
+                 value);
+        if (value->type != ZX_TYPE_STRING) {
+            return ERR_2_VARIABLE_NOT_FOUND;
+        }
+        return ERR_0_OK;
+    }
+    return ERR_2_VARIABLE_NOT_FOUND;
+}
 void machine_destroy(ZxMachine machine) {
     if (machine != NULL) {
         // Ruim eerst de dynamische array binnenin op

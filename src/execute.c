@@ -35,7 +35,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
                 }
                 continue;
             }
-            if (is_zx_alnum(cmd[i]) || is_zx_space(cmd[i])) {
+            if (is_zx_alnum(cmd[i]) || is_zx_space(cmd[i]) || cmd[i] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
                 variable_name[name_size] = cmd[i];
                 name_size++;
                 continue;
@@ -56,6 +56,15 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     err = solve_expression(machine,
         expr, expr_size, &result, &bytes_read);
     if (err != ERR_0_OK) {
+        zx_free_string(&result);
+        return err;
+    }
+    if (var_name[1] == '$') {
+        if (result.type != ZX_TYPE_STRING) {
+            zx_free_string(&result);
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+        err = machine_set_string(machine, var_name[0], &result);
         zx_free_string(&result);
         return err;
     }
@@ -91,6 +100,10 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         machine_print_value(machine, result);
         zx_free_string(&result);
         cursor += bytes_read;
+
+        while (cursor < output_size && is_zx_space(cmd[cursor])) {
+            cursor++;
+        }
 
         if (cursor >= output_size) break;
 

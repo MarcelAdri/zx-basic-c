@@ -8,9 +8,13 @@
 
 // Dit zorgt ervoor dat Emscripten-functies beschikbaar zijn als we voor het web compileren
 #ifdef __EMSCRIPTEN__
-#include <emscripten.h>
+    #include <emscripten.h>
 #else
-#define EMSCRIPTEN_KEEPALIVE // Doet niets op je lokale pc, voorkomt compiler-fouten
+    #define EMSCRIPTEN_KEEPALIVE
+
+    // Fopspeen voor Clangd: vervang EM_ASM lokaal door absoluut niets
+    #define EM_ASM(...)
+    #define EM_ASM_(...)
 #endif
 
 void ons_systeem_print_kanaal(const char *text) {
@@ -104,6 +108,9 @@ const char* UI_get_version(void) {
 }
 
 int main(void) {
+    EM_ASM({
+        console.log("BINGO! Deze komt 100% zeker aan in F12.");
+    });
     printf("ZX Spectrum BASIC WASM Module Geladen. v%s\n", ZX_BASIC_VERSION);
     return 0;
 }

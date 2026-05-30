@@ -120,42 +120,6 @@ ZxError make_double(const char *text, double *out_double) {
     }
     return ERR_0_OK;
 }
-// ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size, char *number_string, const size_t result_size, size_t *bytes_read) {
-//     size_t i = 0;
-//     while (i < expression_size && is_zx_space(expression[i])) {
-//         i++;
-//     }
-//
-//     if (is_zx_number_start_character(expression[i])) {
-//         size_t len = 0;
-//         while (is_zx_number_character(expression[i]) &&
-//             len < result_size - 1 &&
-//             i < expression_size) {
-//             number_string[len] = *get_content_from_token(expression[i]);
-//             len++;
-//             i++;
-//             }
-//         if (len > 0) {
-//             number_string[len] = '\0';
-//             char result[result_size];
-//             double value;
-//             ZxError err = make_double(number_string, &value);
-//             if (err != ERR_0_OK) {
-//                 return err;
-//             }
-//             size_t bytes_written;
-//             err = formatted_number(value, result, result_size, &bytes_written);
-//             if (err != ERR_0_OK) {
-//                 return err;
-//             }
-//             *bytes_read = i;
-//             strncpy(number_string, result, result_size);
-//             return ERR_0_OK;
-//         }
-//         return ERR_C_NONSENSE_IN_BASIC;
-//     }
-//     return ERR_C_NONSENSE_IN_BASIC;
-// }
 
 ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, const size_t result_size, size_t *bytes_read) {
     char number_string[result_size];
@@ -192,7 +156,6 @@ ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size
 }
 
 ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, ZxValue *literal, size_t *bytes_read) {
-    //TODO: expand with string variables and string functions
     if (literal == NULL || expression == NULL || bytes_read == NULL) {
         return ERR_UNKNOWN;
     }
@@ -282,7 +245,8 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
             variable_name[0] = *get_content_from_token(expression[i]);
             variable_name[1] = '$';
             variable_name[2] = '\0';
-            return ERR_NOT_YET_IMPLEMENTED; //TODO implement string variables
+            *bytes_read = i + 2;
+            return ERR_0_OK;
         }
     }
     size_t len = 0;
@@ -298,4 +262,11 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
 
     return ERR_0_OK;
 
+}
+int name_to_index(const uint8_t name) {
+    int lower_name = tolower(name);
+    if (lower_name >= 'a' && lower_name <= 'z') {
+        return lower_name - 'a';
+    }
+    return -1;
 }

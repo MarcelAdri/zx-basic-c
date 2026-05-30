@@ -17,6 +17,8 @@ typedef void (*ZxPrintCallback)(const char *text);
 ZxMachine machine_create(void);
 ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value);
 ZxError machine_get_numeric(ZxMachine machine, const char *var_name, ZxValue *value);
+ZxError machine_set_string(ZxMachine machine, uint8_t var_name, ZxValue *value);
+ZxError machine_get_string(ZxMachine machine, uint8_t var_name, ZxValue *value);
 uint8_t machine_get_text_cursor_x(ZxMachine machine);
 uint8_t machine_get_text_cursor_y(ZxMachine machine);
 void machine_set_text_cursor_x(ZxMachine machine, uint8_t x);

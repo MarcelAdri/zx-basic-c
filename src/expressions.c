@@ -323,6 +323,61 @@ ZxError solve_expression(ZxMachine machine, const uint8_t *expression, size_t ex
         }
     }
 
+    if (is_string_function(expression[i])) {
+        if (is_string_function_num_argument(expression[i])) {
+            ctx.buffer = expression + i + 1;
+            ctx.size = expression_size - i - 1;
+            double argument = parse_expression(&ctx);
+            if (ctx.last_error != ERR_0_OK) {
+                return ctx.last_error;
+            }
+            ZxValue arg;
+            zx_init_value(&arg);
+            err = zx_assign_number(argument, &arg);
+            if (err != ERR_0_OK) {
+                zx_free_string(&arg);
+                ctx.last_error = err;
+                return ctx.last_error;
+            }
+            err = zx_function_call(expression[i], arg, result);
+            zx_free_string(&arg);
+            ctx.last_error = err;
+            if (bytes_read != NULL) {
+                *bytes_read = i + 1 + ctx.cursor;
+            }
+            return ctx.last_error;
+        }
+        if (is_string_function_str_argument(expression[i])) {
+            ctx.buffer = expression + i + 1;
+            ctx.size = expression_size - i - 1;
+            ZxValue arg;
+            zx_init_value(&arg);
+            err = zx_assign_string(ctx.buffer, ctx.size, &arg);
+            if (err != ERR_0_OK) {
+                zx_free_string(&arg);
+                ctx.last_error = err;
+            }
+            err = zx_function_call(expression[i], arg, result);
+            zx_free_string(&arg);
+            ctx.last_error = err;
+            if (bytes_read != NULL) {
+                *bytes_read = i + 1 + ctx.cursor;
+            }
+            return ctx.last_error;
+        }
+        if (is_string_function_no_argument(expression[i])) {
+            ZxValue arg;
+            zx_init_value(&arg);
+            err = zx_function_call(expression[i], arg, result);
+            zx_free_string(&arg);
+            ctx.last_error = err;
+            if (bytes_read != NULL) {
+                *bytes_read = i + 1;
+            }
+            return ctx.last_error;
+        }
+    }
+
     // 4. Fallback: Het moet een wiskundige expressie of numerieke variabele zijn
     double value = parse_expression(&ctx);
     if (ctx.last_error != ERR_0_OK) {

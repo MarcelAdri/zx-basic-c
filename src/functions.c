@@ -18,8 +18,23 @@ static ZxError zx_function_abs(const ZxValue argument, ZxValue *result) {
     return zx_assign_number(res, result);
 
 }
+static ZxError zx_function_chr_string(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    if (arg < 0 || arg > 255) {
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
+    const uint8_t text = (uint8_t) arg;
+    return zx_assign_string(&text, 1, result);
+}
 
 ZxError zx_function_call(const uint8_t function, const ZxValue argument, ZxValue *result) {
+    if (result == NULL) {
+        return ERR_UNKNOWN;
+    }
     if ((is_num_function_num_arg(function) ||
         is_string_function_num_argument(function)) &&
         argument.type != ZX_TYPE_NUMBER) {
@@ -34,6 +49,8 @@ ZxError zx_function_call(const uint8_t function, const ZxValue argument, ZxValue
     switch (function) {
         case 189:  //ABS
             return zx_function_abs(argument, result);
+        case 194:  //CHR$
+            return zx_function_chr_string(argument, result);
 
     }
 

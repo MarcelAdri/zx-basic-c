@@ -21,8 +21,6 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     uint8_t expr[256] = {0};
     char var_name[MAX_VAR_NAME_LEN];
     ZxError err;
-    ZxValue value;
-    zx_init_value(&value);
     size_t name_size = 0;
     size_t expr_size = 0;
     for (size_t i = 1; i < output_size; i++) {
@@ -30,7 +28,8 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
             if (cmd[i] == get_token_from_key('=', KEYMAP_MODE_LITERAL)) {
                 in_variable_name = false;
                 in_expression = true;
-                err = parse_variable_name(variable_name, output_size, var_name, 0);
+                size_t dummy_bytes_read;
+                err = parse_variable_name(variable_name, output_size, var_name, &dummy_bytes_read);
                 if (err != ERR_0_OK) {
                     return err;
                 }
@@ -52,17 +51,26 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
         return ERR_2_VARIABLE_NOT_FOUND;
     }
     size_t bytes_read;
-    err = solve_expression_to_number(machine,
-        expr, expr_size, &value, 255, &bytes_read);
+    ZxValue result;
+    zx_init_value(&result);
+    err = solve_expression(machine,
+        expr, expr_size, &result, &bytes_read);
     if (err != ERR_0_OK) {
+        zx_free_string(&result);
         return err;
     }
-    return machine_set_numeric(machine, var_name, value);
+    if (result.type != ZX_TYPE_NUMBER) {
+        zx_free_string(&result);
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    err = machine_set_numeric(machine, var_name, result);
+    zx_free_string(&result);
+    return err;
 }
 
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
-        machine_print_to_text(machine, "\n"); // Lege print doet alleen een enter!
+        machine_next_line(machine);
         return ERR_0_OK;
     }
 
@@ -71,15 +79,17 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
 
     while (cursor < output_size) {
         print_newline = true;
-        char result[256] = {0};
+        ZxValue result;
+        zx_init_value(&result);
 
-        // Let op: je moet solve_expression_to_string zo aanpassen dat hij
-        // net als je nieuwe recursieve parser (via bytes_read of ctx) teruggeeft
-        // hoeveel bytes hij heeft opgeslokt, anders weet je niet waar ; of , staat!
         size_t bytes_read = 0;
-        ZxError err = solve_expression_to_string(machine, cmd + cursor, output_size - cursor, result, sizeof(result), &bytes_read);
-        if (err != ERR_0_OK) return err;
-        machine_print_to_text(machine, result);
+        ZxError err = solve_expression(machine, cmd + cursor, output_size - cursor, &result, &bytes_read);
+        if (err != ERR_0_OK) {
+            zx_free_string(&result);
+            return err;
+        }
+        machine_print_value(machine, result);
+        zx_free_string(&result);
         cursor += bytes_read;
 
         if (cursor >= output_size) break;
@@ -94,20 +104,15 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         else if (separator == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
             int current_x = machine_get_text_cursor_x(machine);
             if (current_x < 16) {
-                int spaces_needed = 16 - current_x;
-                char space_buffer[32];
-
-                snprintf(space_buffer, sizeof(space_buffer), "%*s", spaces_needed, "");
-
-                machine_print_to_text(machine, space_buffer);
+                machine_set_text_cursor_x(machine, 16);
             } else {
-                machine_print_to_text(machine, "\n");
+                machine_next_line(machine);
             }
 
             print_newline = false;
             cursor++;
         } else if (separator == get_token_from_key('\'', KEYMAP_MODE_LITERAL)) {
-            machine_print_to_text(machine, "\n");
+            machine_next_line(machine);
 
             print_newline = false;
             cursor++;
@@ -118,7 +123,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
     }
 
     if (print_newline) {
-        machine_print_to_text(machine, "\n");
+        machine_next_line(machine);
     }
 
     return ERR_0_OK;

@@ -442,6 +442,27 @@ int get_token_from_key (const char key, const char mode) {
 
     return token > 0 ? token : UNDEFINED_KEYSTROKE;
 }
+ZxError string_to_zx_characters (const char *input, const size_t input_length, uint8_t *output, const size_t output_length, size_t *bytes_written) {
+    if (input == NULL || output == NULL) {
+        return ERR_UNKNOWN;
+    }
+    if (input_length > output_length) {
+        return ERR_UNKNOWN; // Of een specifiekere foutcode zodra je die hebt
+    }
+    for (size_t i = 0; i < input_length; i++) {
+        int get_token = get_token_from_key(input[i], KEYMAP_MODE_LITERAL);
+        if (get_token == UNDEFINED_KEYSTROKE) {
+            output[i] = (uint8_t)get_token_from_key('?', KEYMAP_MODE_LITERAL);
+        } else {
+            output[i] = (uint8_t)get_token;
+        }
+
+    }
+    if (bytes_written != NULL) {
+        *bytes_written = input_length;
+    }
+    return ERR_0_OK;
+}
 const char* get_content_from_token (const uint8_t token) {
     const char* key = NULL;
 

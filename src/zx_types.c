@@ -8,7 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "characters.h"
 #include "errors.h"
+#include "helpers.h"
+#include "machine.h"
 
 static ZxError zx_make_number(const double val, ZxValue *out_value) {
     if (isinf(val) || val > 1.7e38 || val < -1.7e38) {
@@ -67,6 +70,24 @@ ZxError zx_get_string(const ZxValue val, uint8_t **out_text, size_t *out_length)
     *out_length = val.data.string.length;
     return ERR_0_OK;
 }
+ZxError zx_to_string(const uint8_t *input, const size_t input_length, char *output, size_t out_length) {
+    if (input == NULL || output == NULL) {
+        return ERR_UNKNOWN;
+    }
+    if (input_length > out_length - 1) {
+        return ERR_UNKNOWN;
+    }
+    for (size_t i = 0; i < input_length; i++) {
+        if (is_zx_printable_character(input[i])) {
+            output[i] = input[i];
+            continue;
+        }
+        output[i] = '?'; //TODO: verfijnen met langere tokens
+    }
+    output[input_length] = '\0';
+    return ERR_0_OK;
+}
+
 void zx_free_string(ZxValue *val) {
     if (val == NULL) return;
 

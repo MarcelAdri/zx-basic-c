@@ -5,12 +5,6 @@
 #include <stdio.h>
 #include "errors.h"
 
-void error_message(const ZxError error, char *message, const size_t message_size) {
-
-    snprintf(message, message_size, "%s", "DO NOT USE");
-
-}
-
 const char *get_zx_error_message(const ZxError error) {
     switch (error) {
         case ERR_0_OK: return "0 OK";

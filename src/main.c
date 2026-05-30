@@ -63,7 +63,12 @@ const char* UI_format_zx_line(const uint8_t *buffer, const size_t length) {
     if (err == ERR_0_OK) {
         return formatted_output; // Geef de prachtig geformatteerde tekst terug!
     }
-    error_message(err, formatted_output, sizeof formatted_output);
+
+    // DE VEILIGE EN MODERNE FIX:
+    // We gebruiken nu get_zx_error_message en verpakken de fout netjes
+    // zodat de UI-gebruiker ziet dat het om een format-probleem gaat.
+    snprintf(formatted_output, sizeof(formatted_output), "[Format Error: %s]", get_zx_error_message(err));
+
     return formatted_output;
 }
 EMSCRIPTEN_KEEPALIVE

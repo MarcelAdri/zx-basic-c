@@ -39,7 +39,6 @@ typedef enum {
     ERR_UNKNOWN,
 } ZxError;
 
-void error_message(ZxError error, char *message, size_t message_size);
 const char *get_zx_error_message(ZxError error);
 
 #endif //ZX_BASIC_C_ERRORS_H

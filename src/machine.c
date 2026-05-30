@@ -3,13 +3,15 @@
 //
 #include <stddef.h>
 #include <ctype.h>
-#include <stdbool.h>
+#include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include "machine.h"
 #include "errors.h"
 #include "zx_types.h"
+#include "helpers.h"
 
 #define NOT_FOUND (-1)
 
@@ -199,6 +201,11 @@ uint8_t machine_get_text_cursor_y(ZxMachine machine) {
     }
     return 0;
 }
+void machine_set_text_cursor_x(ZxMachine machine, const uint8_t x) {
+    if (machine != NULL) {
+        machine->text_cursor_x = x;
+    }
+}
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback) {
     if (machine != NULL) {
         machine->print_callback = callback;
@@ -221,8 +228,9 @@ void machine_next_line(ZxMachine machine) {
     }
 
 }
-void machine_print_to_text(ZxMachine machine, const char *text) {
-    if (machine == NULL || machine->print_callback == NULL || text == NULL) return;
+static void machine_print_to_text(ZxMachine machine, const char *text) {
+    assert(text != NULL && "text mag nooit NULL zijn in deze interne functie");
+    if (machine == NULL || machine->print_callback == NULL) return;
 
     size_t len = strlen(text);
     if (len == 0) return;
@@ -237,6 +245,28 @@ void machine_print_to_text(ZxMachine machine, const char *text) {
             machine_next_line(machine);
         } else {
             machine->text_cursor_x++;
+        }
+    }
+}
+void machine_print_value(ZxMachine machine, const ZxValue value) {
+    char c_string[2048] = {0};
+
+    if (value.type == ZX_TYPE_STRING) {
+        // Directe conversie: ZX-tokens van de stringvariabele -> C-string
+        if (zx_to_string(value.data.string.text, value.data.string.length, c_string, sizeof(c_string)) == ERR_0_OK) {
+            machine_print_to_text(machine, c_string);
+        }
+    }
+    else if (value.type == ZX_TYPE_NUMBER) {
+        uint8_t zx_tokens[32];
+        size_t bytes_written = 0;
+
+        // Stap 1: Van double naar ZX-tokens
+        if (formatted_number(value.data.number, zx_tokens, sizeof(zx_tokens), &bytes_written) == ERR_0_OK) {
+            // Stap 2: Van ZX-tokens naar C-string
+            if (zx_to_string(zx_tokens, bytes_written, c_string, sizeof(c_string)) == ERR_0_OK) {
+                machine_print_to_text(machine, c_string);
+            }
         }
     }
 }

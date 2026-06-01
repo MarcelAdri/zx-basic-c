@@ -121,30 +121,27 @@ ZxError make_double(const char *text, double *out_double) {
     return ERR_0_OK;
 }
 
-ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, const size_t result_size, size_t *bytes_read) {
-    char number_string[result_size];
+ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, ZxValue *out_number, size_t *bytes_read) {
+    if (expression == NULL || out_number == NULL || bytes_read == NULL) return ERR_UNKNOWN;
+    char number_string[200];
     size_t i = 0;
     while (i < expression_size && is_zx_space(expression[i])) {
         i++;
     }
-    if (is_zx_number_start_character(expression[i])) {
+    if (i < expression_size && is_zx_number_start_character(expression[i])) {
         size_t len = 0;
-        while (is_zx_number_character(expression[i]) &&
-            len < result_size - 1 &&
-            i < expression_size) {
+        while (i < expression_size && len < 200 - 1 && is_zx_number_character(expression[i])) {
             number_string[len] = *get_content_from_token(expression[i]);
             len++;
             i++;
             }
         if (len > 0) {
             number_string[len] = '\0';
-            char result[result_size];
             double value;
             ZxError err = make_double(number_string, &value);
-            if (err != ERR_0_OK) {
-                return err;
-            }
-            *number = value;
+            if (err != ERR_0_OK) return err;
+            err = zx_assign_number(value, out_number);
+            if (err != ERR_0_OK) return err;
             *bytes_read = i;
             return ERR_0_OK;
 
@@ -232,15 +229,16 @@ ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expre
 }
 
 ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, char *variable_name, size_t *bytes_read) {
+    if (expression == NULL || variable_name == NULL || bytes_read == NULL) return ERR_UNKNOWN;
     size_t i = 0;
-    while (is_zx_space(expression[i]) && i < expression_size) {
+    while (i < expression_size && is_zx_space(expression[i])) {
         i++;
     }
     if (i == expression_size) {
         return ERR_2_VARIABLE_NOT_FOUND;
     }
 
-    if (is_zx_alpha(expression[i]) && i < expression_size - 1) {
+    if (i < expression_size - 1 && is_zx_alpha(expression[i])) {
         if (expression[i+1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
             variable_name[0] = *get_content_from_token(expression[i]);
             variable_name[1] = '$';
@@ -250,8 +248,7 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
         }
     }
     size_t len = 0;
-    while ((is_zx_alnum(expression[i]) || is_zx_space(expression[i]))
-        && i < expression_size) {
+    while (i < expression_size && (is_zx_alnum(expression[i]) || is_zx_space(expression[i]))) {
         variable_name[len] = *get_content_from_token(expression[i]);
         len++;
         i++;

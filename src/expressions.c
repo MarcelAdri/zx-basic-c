@@ -23,372 +23,251 @@ typedef struct {
     const uint8_t *buffer;
     size_t size;
     size_t cursor;
-    ZxError last_error;
 } ParserContext;
 
-double parse_expression(ParserContext *ctx);
-double parse_term(ParserContext *ctx);
-double parse_power(ParserContext *ctx);
-double parse_factor(ParserContext *ctx);
+ZxError parse_expression(ParserContext *ctx, ZxValue *out_value);
+ZxError parse_term(ParserContext *ctx, ZxValue *out_value);
+ZxError parse_power(ParserContext *ctx, ZxValue *out_value);
+ZxError parse_factor(ParserContext *ctx, ZxValue *out_value);
 
-double parse_expression(ParserContext *ctx) {
-    double left_value = parse_term(ctx);
-    if (ctx->last_error != ERR_0_OK) {
-        return 0;
+static ZxError zx_calculate(uint8_t operator, ZxValue *left, ZxValue *right) {
+    if (left == NULL || right == NULL) return ERR_UNKNOWN;
+
+    if (operator == '+' && left->type == ZX_TYPE_STRING && right->type == ZX_TYPE_STRING) {
+        return ERR_NOT_YET_IMPLEMENTED; // TODO: zx_concat_strings(left, right)
     }
-    while (is_zx_plus_character(ctx->buffer[ctx->cursor]) ||
-        is_zx_minus_character(ctx->buffer[ctx->cursor])) {
-        char operator = ctx->buffer[ctx->cursor];
-        ctx->cursor++;
-        double right_value = parse_term(ctx);
-        if (ctx->last_error != ERR_0_OK) {
-            return 0;
-        }
-        if (is_zx_plus_character(operator)) {
-            left_value += right_value;
-        }
-        if (is_zx_minus_character(operator)) {
-            left_value -= right_value;
-        }
+
+    double lv, rv;
+    ZxError err = zx_get_number(*left, &lv);
+    if (err != ERR_0_OK) return err;
+
+    err = zx_get_number(*right, &rv);
+    if (err != ERR_0_OK) return err;
+
+    switch (operator) {
+        case '+': lv += rv; break;
+        case '-': lv -= rv; break;
+        case '*': lv *= rv; break;
+        case '/': lv /= rv; break;
+        case 128: lv = pow(lv, rv); break;
+        default: return ERR_C_NONSENSE_IN_BASIC;
     }
-    ctx->last_error = ERR_0_OK;
-    return left_value;
+
+    return zx_assign_number(lv, left);
 }
-double parse_term(ParserContext *ctx) {
-    double left_value = parse_power(ctx);
-    if (ctx->last_error != ERR_0_OK) {
-        return 0;
+
+ZxError parse_expression(ParserContext *ctx, ZxValue *out_value) {
+    if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
+    ZxError err;
+
+    ZxValue left_value;
+    zx_init_value(&left_value);
+    ZxValue right_value;
+    zx_init_value(&right_value);
+
+    err = parse_term(ctx, &left_value);
+    if (err != ERR_0_OK) goto error_cleanup;
+
+    while (is_zx_plus_character(ctx->buffer[ctx->cursor]) ||
+           is_zx_minus_character(ctx->buffer[ctx->cursor])) {
+
+        uint8_t operator = ctx->buffer[ctx->cursor];
+        ctx->cursor++;
+
+        err = parse_term(ctx, &right_value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        err = zx_calculate(operator, &left_value, &right_value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        zx_free_string(&right_value);
     }
+
+    *out_value = left_value;
+    zx_free_string(&right_value);
+    return ERR_0_OK;
+
+    error_cleanup:
+        zx_free_string(&left_value);
+        zx_free_string(&right_value);
+        return err;
+}
+ZxError parse_term(ParserContext *ctx, ZxValue *out_value) {
+    if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
+    ZxError err;
+
+    ZxValue left_value;
+    zx_init_value(&left_value);
+    ZxValue right_value;
+    zx_init_value(&right_value);
+
+    err = parse_power(ctx, &left_value);
+    if (err != ERR_0_OK) goto error_cleanup;
+
     while (is_zx_asterisk_character(ctx->buffer[ctx->cursor]) ||
         is_zx_slash_character(ctx->buffer[ctx->cursor])) {
-        char operator = ctx->buffer[ctx->cursor];
+        uint8_t operator = ctx->buffer[ctx->cursor];
         ctx->cursor++;
-        double right_value = parse_power(ctx);
-        if (ctx->last_error != ERR_0_OK) {
-            return 0;
-        }
-        if (is_zx_asterisk_character(operator)) {
-            left_value *= right_value;
-        }
-        if (is_zx_slash_character(operator)) {
-            left_value /= right_value;
-        }
-    }
-    ctx->last_error = ERR_0_OK;
-    return left_value;
-}
-double parse_power(ParserContext *ctx) {
-    double left_value = parse_factor(ctx);
-    if (ctx->last_error != ERR_0_OK) {
-        return 0;
-    }
-    while (is_zx_power_character(ctx->buffer[ctx->cursor])) {
-        char operator = ctx->buffer[ctx->cursor];
-        ctx->cursor++;
-        double right_value = parse_factor(ctx);
-        if (ctx->last_error != ERR_0_OK) {
-            return 0;
-        }
-        if (is_zx_power_character(operator)) {
-            left_value = pow(left_value, right_value);
-            ctx->last_error = ERR_0_OK;
-            return left_value;
-        }
 
+        err = parse_power(ctx, &right_value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        err = zx_calculate(operator, &left_value, &right_value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        zx_free_string(&right_value);
     }
-    ctx->last_error = ERR_0_OK;
-    return left_value;
+
+    *out_value = left_value;
+    zx_free_string(&right_value);
+    return ERR_0_OK;
+
+    error_cleanup:
+        zx_free_string(&left_value);
+        zx_free_string(&right_value);
+        return err;
 }
-double parse_factor(ParserContext *ctx) {
-    uint8_t token = ctx->buffer[ctx->cursor];
+ZxError parse_power(ParserContext *ctx, ZxValue *out_value) {
+    if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
+
+    ZxValue left_value;
+    zx_init_value(&left_value);
+    ZxValue right_value;
+    zx_init_value(&right_value);
+
+    err = parse_factor(ctx, &left_value);
+    if (err != ERR_0_OK) goto error_cleanup;
+
+    while (is_zx_power_character(ctx->buffer[ctx->cursor])) {
+        uint8_t operator = ctx->buffer[ctx->cursor];
+        ctx->cursor++;
+
+        err = parse_factor(ctx, &right_value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        err = zx_calculate(operator, &left_value, &right_value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        zx_free_string(&right_value);
+    }
+    *out_value = left_value;
+    zx_free_string(&right_value);
+    return ERR_0_OK;
+
+    error_cleanup:
+        zx_free_string(&left_value);
+        zx_free_string(&right_value);
+        return err;
+}
+ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
+    if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
+    ZxError err;
+    uint8_t token = ctx->buffer[ctx->cursor];
+
+    ZxValue value;
+    zx_init_value(&value);
+    ZxValue argument;
+    zx_init_value(&argument);
 
     if (token == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
         ctx->cursor++;
-        double value = parse_expression(ctx);
-        if (ctx->last_error != ERR_0_OK) {
-            return 0;
-        }
+
+        err = parse_expression(ctx, &value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
         if (ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
-            ctx->last_error = ERR_C_NONSENSE_IN_BASIC;
-            return 0;
+            return ERR_C_NONSENSE_IN_BASIC;
         }
         ctx->cursor++;
-        ctx->last_error = ERR_0_OK;
-        return value;
+        *out_value = value;
+        zx_free_string(&argument);
+        return ERR_0_OK;
     }
     if (token == '+' || token == '-') {
         
-        ctx->cursor++; // Sla het plus- of minteken over
-
-        double value = parse_factor(ctx);
-
-        if (ctx->last_error != ERR_0_OK) {
-            return 0;
-        }
-
-        ctx->last_error = ERR_0_OK;
-
-        return (token == '-') ? -value : value;
-    }
-
-    if (is_num_function_num_arg(token)) {
         ctx->cursor++;
-        double argument = parse_factor(ctx);
-        if (ctx->last_error != ERR_0_OK) {
-            return 0;
-        }
-        ZxValue arg;
-        zx_init_value(&arg);
-        err = zx_assign_number(argument, &arg);
-        if (err != ERR_0_OK) {
-            zx_free_string(&arg);
-            ctx->last_error = err;
-            return 0;
-        }
-        ZxValue zx_value;
-        zx_init_value(&zx_value);
-        err = zx_function_call(token, arg, &zx_value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&arg);
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
-        double value;
-        err = zx_get_number(zx_value, &value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&arg);
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
-        zx_free_string(&arg);
-        zx_free_string(&zx_value);
-        ctx->last_error = ERR_0_OK;
-        return value;
+
+        err = parse_factor(ctx, &value);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        double value_number;
+        err = zx_get_number(value, &value_number);
+        if (err != ERR_0_OK) goto error_cleanup;
+        value_number = (token == '-') ? -value_number : value_number;
+        zx_free_string(&value);
+        zx_free_string(&argument);
+        return zx_assign_number(value_number, out_value);
     }
-    if (is_num_function_no_arg(token)) {
-        ctx->cursor++;
-        ZxValue zx_value;
-        zx_init_value(&zx_value);
-        ZxValue arg;
-        zx_init_value(&arg);
-        err = zx_function_call(token, arg, &zx_value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&arg);
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
-        double value;
-        err = zx_get_number(zx_value, &value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&arg);
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
-        zx_free_string(&arg);
-        zx_free_string(&zx_value);
-        ctx->last_error = ERR_0_OK;
-        return value;
-    }
-    if (is_num_function_str_arg(token)) {
+
+    if (is_function(token)) {
         ctx->cursor++;
         ZxValue arg;
         zx_init_value(&arg);
-        err = zx_assign_string(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, &arg);
-        if (err != ERR_0_OK) {
-            ctx->last_error = err;
-            zx_free_string(&arg);
-            return 0;
-        }
-        ZxValue zx_value;
-        zx_init_value(&zx_value);
-        err = zx_function_call(token, arg, &zx_value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&arg);
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
-        double value;
-        err = zx_get_number(zx_value, &value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&arg);
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
+        err = parse_factor(ctx, &arg);
+        if (err != ERR_0_OK) goto error_cleanup;
+        err = zx_function_call(token, arg, out_value);
         zx_free_string(&arg);
-        zx_free_string(&zx_value);
-        ctx->last_error = ERR_0_OK;
-        return value;
     }
     if (is_zx_number_start_character(token)) {
-        double value;
         size_t bytes_read;
-        err = parse_number_to_double(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, &value, 32, &bytes_read);
-        if (err != ERR_0_OK) {
-            ctx->last_error = err;
-            return 0;
-        }
+        err = parse_number_to_double(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, out_value, &bytes_read);
+        if (err != ERR_0_OK) goto error_cleanup;
         ctx->cursor += bytes_read;
-        ctx->last_error = ERR_0_OK;
-        return value;
+        return ERR_0_OK;
     }
     if (is_zx_alpha(token)) {
-        double value;
-        ZxValue zx_value;
-        zx_init_value(&zx_value);
         char variable_name[MAX_VAR_NAME_LEN];
         size_t bytes_read;
         err = parse_variable_name(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, variable_name, &bytes_read);
-        if (err != ERR_0_OK) {
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
+        if (err != ERR_0_OK) goto error_cleanup;
         ctx->cursor += bytes_read;
-        err = machine_get_numeric(ctx->machine, variable_name, &zx_value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
+        if (strlen(variable_name) == 2 && variable_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+            int index = name_to_index(get_token_from_key(variable_name[0], KEYMAP_MODE_LITERAL));
+            if (index == -1) {
+                err = ERR_C_NONSENSE_IN_BASIC;
+                goto error_cleanup;
+            }
+            err = machine_get_string(ctx->machine, index, out_value);
+            goto error_cleanup;
         }
-        err = zx_get_number(zx_value, &value);
-        if (err != ERR_0_OK) {
-            zx_free_string(&zx_value);
-            ctx->last_error = err;
-            return 0;
-        }
-        zx_free_string(&zx_value);
-        ctx->last_error = ERR_0_OK;
-        return value;
+        err = machine_get_numeric(ctx->machine, variable_name, out_value);
+        goto error_cleanup;
     }
-    ctx->last_error = ERR_C_NONSENSE_IN_BASIC;
-    return 0;
-}
-ZxError solve_expression(ZxMachine machine, const uint8_t *expression, size_t expression_size, ZxValue *result, size_t *bytes_read) {
-    // Veiligheidscheck (altijd goed om bovenaan te hebben)
-    if (expression == NULL || result == NULL) {
-        return ERR_UNKNOWN;
+    if (token == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+        size_t bytes_read;
+        err = parse_string_literal(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, out_value, &bytes_read);
+        if (err != ERR_0_OK) goto error_cleanup;
+        ctx->cursor += bytes_read;
+        return ERR_0_OK;
     }
 
-    ZxError err;
+    error_cleanup:
+        zx_free_string(&value);
+        zx_free_string(&argument);
+        return err;
+}
+ZxError solve_expression(ZxMachine machine, const uint8_t *expression, size_t expression_size, ZxValue *result, size_t *bytes_read) {
+    if (expression == NULL || result == NULL || bytes_read == NULL || machine == NULL) return ERR_UNKNOWN;
+
     ParserContext ctx = {0};
     ctx.machine = machine;
     ctx.buffer = expression;
     ctx.size = expression_size;
     ctx.cursor = 0;
 
-    // 1. Skip spaties
     size_t i = 0;
     while (i < expression_size && is_zx_space(expression[i])) {
         i++;
     }
 
-    // Is het einde van de expressie al bereikt?
     if (i >= expression_size) {
         return ERR_C_NONSENSE_IN_BASIC;
     }
 
-    // 2. String literals
-    if (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
-        size_t string_bytes_read = 0;
-
-        // LET OP: expression + i doorgeven!
-        err = parse_string_literal(expression + i, expression_size - i, result, &string_bytes_read);
-        if (err != ERR_0_OK) {
-            return err;
-        }
-
-        if (bytes_read != NULL) {
-            // Tel de overgeslagen spaties op bij de gelezen string bytes
-            *bytes_read = i + string_bytes_read;
-        }
-        return ERR_0_OK;
-    }
-
-    // 3. String variabelen
-    if (is_zx_alpha(expression[i])) {
-
-        if (i + 1 < expression_size && expression[i + 1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
-            if (bytes_read != NULL) {
-                // Tel de overgeslagen spaties op bij de gelezen string bytes
-                *bytes_read = i + 2;
-            }
-            return machine_get_string(machine, expression[i], result);
-        }
-    }
-
-    if (is_string_function(expression[i])) {
-        if (is_string_function_num_argument(expression[i])) {
-            ctx.buffer = expression + i + 1;
-            ctx.size = expression_size - i - 1;
-            double argument = parse_expression(&ctx);
-            if (ctx.last_error != ERR_0_OK) {
-                return ctx.last_error;
-            }
-            ZxValue arg;
-            zx_init_value(&arg);
-            err = zx_assign_number(argument, &arg);
-            if (err != ERR_0_OK) {
-                zx_free_string(&arg);
-                ctx.last_error = err;
-                return ctx.last_error;
-            }
-            err = zx_function_call(expression[i], arg, result);
-            zx_free_string(&arg);
-            ctx.last_error = err;
-            if (bytes_read != NULL) {
-                *bytes_read = i + 1 + ctx.cursor;
-            }
-            return ctx.last_error;
-        }
-        if (is_string_function_str_argument(expression[i])) {
-            ctx.buffer = expression + i + 1;
-            ctx.size = expression_size - i - 1;
-            ZxValue arg;
-            zx_init_value(&arg);
-            err = zx_assign_string(ctx.buffer, ctx.size, &arg);
-            if (err != ERR_0_OK) {
-                zx_free_string(&arg);
-                ctx.last_error = err;
-            }
-            err = zx_function_call(expression[i], arg, result);
-            zx_free_string(&arg);
-            ctx.last_error = err;
-            if (bytes_read != NULL) {
-                *bytes_read = i + 1 + ctx.cursor;
-            }
-            return ctx.last_error;
-        }
-        if (is_string_function_no_argument(expression[i])) {
-            ZxValue arg;
-            zx_init_value(&arg);
-            err = zx_function_call(expression[i], arg, result);
-            zx_free_string(&arg);
-            ctx.last_error = err;
-            if (bytes_read != NULL) {
-                *bytes_read = i + 1;
-            }
-            return ctx.last_error;
-        }
-    }
-
-    // 4. Fallback: Het moet een wiskundige expressie of numerieke variabele zijn
-    double value = parse_expression(&ctx);
-    if (ctx.last_error != ERR_0_OK) {
-        return ctx.last_error;
-    }
-
-    if (bytes_read != NULL) {
-        // parse_expression is vanaf 0 begonnen, dus ctx.cursor klopt precies voor de originele expression pointer
-        *bytes_read = ctx.cursor;
-    }
-
-    return zx_assign_number(value, result);
+    ZxError err = parse_expression(&ctx, result);
+    if (err != ERR_0_OK) return err;
+    *bytes_read = ctx.cursor;
+    return ERR_0_OK;
 }
 

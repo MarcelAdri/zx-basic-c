@@ -9,8 +9,7 @@
 
 ZxError make_double(const char *text, double *out_float);
 ZxError formatted_number(double number, uint8_t *out_string, size_t out_string_size, size_t *bytes_written);
-ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, double *number, size_t result_size, size_t *bytes_read);
-//ZxError parse_number_to_string(const uint8_t *expression, size_t expression_size, char *number_string, size_t result_size, size_t *bytes_read);
+ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, ZxValue *out_number, size_t *bytes_read);
 ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, char *variable_name, size_t *bytes_read);
 int name_to_index(uint8_t name);
 ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, ZxValue *literal, size_t *bytes_read);

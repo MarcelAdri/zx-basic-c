@@ -263,6 +263,12 @@ const uint8_t* machine_get_text_screen(ZxMachine machine) {
     }
     return NULL;
 }
+const uint8_t* machine_get_from_screen(ZxMachine machine, const uint8_t y, const uint8_t x) {
+    if (machine != NULL) {
+        return &machine->text_screen[y][x];
+    }
+    return NULL;
+}
 void machine_next_line(ZxMachine machine) {
     machine->text_cursor_x = 0;
     machine->text_cursor_y++;

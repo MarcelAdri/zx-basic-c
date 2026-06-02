@@ -409,15 +409,65 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
     if (is_function(token)) {
         ctx->cursor++;
         zx_skip_spaces(ctx);
-        ZxValue arg;
-        zx_init_value(&arg);
-        if (!is_num_function_no_arg(token) && !is_string_function_no_argument(token)) {
+
+        if (is_argument_function(token)) {
+            ZxValue arg;
+            zx_init_value(&arg);
             err = parse_factor(ctx, &arg);
             if (err != ERR_0_OK) goto error_cleanup;
+            err = zx_function_call_1_arg(ctx->machine, token, arg, out_value);
+            zx_free_string(&arg);
+            return err;
         }
-        err = zx_function_call(ctx->machine, token, arg, out_value);
-        zx_free_string(&arg);
-        return err;
+        if (is_no_arg_function(token)) {
+            err = zx_function_call_no_arg(ctx->machine, token, out_value);
+            return err;
+        }
+        if (is_coordinate_function(token)) {
+            if (ctx->buffer[ctx->cursor] != get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+                err = ERR_C_NONSENSE_IN_BASIC;
+                goto error_cleanup;
+            }
+            ctx->cursor++;
+            zx_skip_spaces(ctx);
+
+            ZxValue arg1, arg2;
+            zx_init_value(&arg1);
+            zx_init_value(&arg2);
+
+            err = parse_expression(ctx, &arg1);
+            if (err != ERR_0_OK) goto multi_arg_cleanup;
+
+            if (ctx->buffer[ctx->cursor] != ',') {
+                err = ERR_C_NONSENSE_IN_BASIC;
+                goto multi_arg_cleanup;
+            }
+            ctx->cursor++;
+            zx_skip_spaces(ctx);
+
+            err = parse_expression(ctx, &arg2);
+            if (err != ERR_0_OK) goto multi_arg_cleanup;
+
+            if (ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+                err = ERR_C_NONSENSE_IN_BASIC;
+                goto multi_arg_cleanup;
+            }
+            ctx->cursor++;
+            zx_skip_spaces(ctx);
+
+            err = zx_function_call_2_arg(ctx->machine, token, arg1, arg2, out_value);
+            if (err != ERR_0_OK) goto multi_arg_cleanup;
+            zx_free_string(&arg1);
+            zx_free_string(&arg2);
+            return ERR_0_OK;
+
+            multi_arg_cleanup:
+                zx_free_string(&arg1);
+                zx_free_string(&arg2);
+                goto error_cleanup;
+        }
+        err = ERR_C_NONSENSE_IN_BASIC;
+        goto error_cleanup;
     }
     if (is_zx_number_start_character(token)) {
         size_t bytes_read;

@@ -23,6 +23,7 @@ uint8_t machine_get_text_cursor_x(ZxMachine machine);
 uint8_t machine_get_text_cursor_y(ZxMachine machine);
 void machine_set_text_cursor_x(ZxMachine machine, uint8_t x);
 const uint8_t* machine_get_text_screen(ZxMachine machine);
+const uint8_t* machine_get_from_screen(ZxMachine machine, uint8_t y, uint8_t x);
 int machine_get_state(ZxMachine machine);
 void machine_set_location(ZxMachine machine, uint16_t line, uint8_t statement);
 uint16_t machine_get_current_line(ZxMachine machine);

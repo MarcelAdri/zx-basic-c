@@ -632,6 +632,7 @@ bool is_num_function_num_arg(const uint8_t c) {
         c == 187 ||   //SQR
         c == 188 ||   //SGN
         c == ZX_FUN_ABS ||
+        c == ZX_FUN_FN ||
         c == 195) {   //NOT
         return true;
     }
@@ -652,14 +653,16 @@ bool is_num_function_str_arg(const uint8_t c) {
     }
     return false;
 }
-bool is_num_function(const uint8_t c) {
-    return is_num_function_num_arg(c) || is_num_function_no_arg(c) || is_num_function_str_arg(c);
-}
-bool is_string_function_no_argument(const uint8_t c) {
-    if (c == ZX_FUN_INKEY_S) {
+bool is_num_function_coordinate_arg(const uint8_t c) {
+    if (c == ZX_FUN_POINT ||
+        c == ZX_FUN_ATTR) {
         return true;
     }
     return false;
+}
+bool is_num_function(const uint8_t c) {
+    return is_num_function_num_arg(c) || is_num_function_no_arg(c) || is_num_function_str_arg(c) ||
+        is_num_function_coordinate_arg(c);
 }
 bool is_string_function_str_argument(const uint8_t c) {
     if (c == 174) {  //VAL$
@@ -674,9 +677,37 @@ bool is_string_function_num_argument(const uint8_t c) {
     }
     return false;
 }
+bool is_string_function_no_argument(const uint8_t c) {
+    if (c == ZX_FUN_INKEY_S) {
+        return true;
+    }
+    return false;
+}
+bool is_string_function_coordinate_argument(const uint8_t c) {
+    if (c == ZX_FUN_SCREEN_S) {
+        return true;
+    }
+    return false;
+}
 bool is_string_function(const uint8_t c) {
-    return is_string_function_no_argument(c) || is_string_function_str_argument(c) || is_string_function_num_argument(c);
+    return is_string_function_str_argument(c) || is_string_function_num_argument(c) || is_string_function_coordinate_argument(c) ||
+        is_string_function_no_argument(c);
+}
+bool is_argument_function(const uint8_t c) {
+    return is_string_function_num_argument(c) ||
+        is_string_function_str_argument(c) ||
+        is_num_function_num_arg(c) ||
+        is_num_function_str_arg(c);
+}
+bool is_coordinate_function(const uint8_t c) {
+    return is_string_function_coordinate_argument(c) || is_num_function_coordinate_arg(c);
+}
+bool is_no_arg_function(const uint8_t c) {
+    return is_num_function_no_arg(c) || is_string_function_no_argument(c);
 }
 bool is_function(const uint8_t c) {
     return is_num_function(c) || is_string_function(c);
+}
+bool is_function_no_coordinate(const uint8_t c) {
+    return is_function(c) && !is_coordinate_function(c);
 }

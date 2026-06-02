@@ -87,11 +87,17 @@ bool is_zx_power_character(uint8_t c);
 bool is_num_function_num_arg(uint8_t c);
 bool is_num_function_no_arg(uint8_t c);
 bool is_num_function_str_arg(uint8_t c);
+bool is_num_function_coordinate_arg(uint8_t c);
 bool is_num_function(uint8_t c);
-bool is_string_function_no_argument(uint8_t c);
 bool is_string_function_str_argument(uint8_t c);
 bool is_string_function_num_argument(uint8_t c);
+bool is_string_function_coordinate_argument(uint8_t c);
+bool is_string_function_no_argument(uint8_t c);
 bool is_string_function(uint8_t c);
+bool is_argument_function(uint8_t c);
+bool is_coordinate_function(uint8_t c);
+bool is_no_arg_function(uint8_t c);
+bool is_function_no_coordinate(uint8_t c);
 bool is_function(uint8_t c);
 
 #endif //ZX_BASIC_C_CHARACTERS_H

@@ -3,9 +3,12 @@
 //
 
 #include <stdint.h>
+#include <stdio.h>
 #include "functions.h"
 #include "characters.h"
 #include "errors.h"
+#include "machine.h"
+#include "expressions.h"
 
 // De exacte 5-byte ROM waarde van PI op de ZX Spectrum (ROM adres 1A70)
 #define ZX_ROM_PI 3.14159265
@@ -60,6 +63,29 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
     const uint8_t *screen = machine_get_from_screen(machine, (uint8_t)y_val, (uint8_t)x_val);
     return zx_assign_string(screen, 1, result);
 }
+static ZxError zx_function_val_s_string(ZxMachine machine, const ZxValue argument, ZxValue *result) {
+    uint8_t *expr_text = NULL;
+    size_t expr_len = 0;
+    zx_get_string(argument, &expr_text, &expr_len);
+    printf("Internal expr: %.*s\n", (int)expr_len, expr_text);
+
+    ZxValue eval_result;
+    zx_init_value(&eval_result);
+    size_t bytes_read = 0;
+
+    ZxError err = solve_expression(machine, expr_text, expr_len, &eval_result, &bytes_read);
+    if (err != ERR_0_OK) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+    if (eval_result.type != ZX_TYPE_STRING) {
+        zx_free_string(&eval_result);
+        return ERR_C_NONSENSE_IN_BASIC; // Oeps, de string leverde een getal op!
+    }
+
+    *result = eval_result;
+    return ERR_0_OK;
+}
 
 ZxError zx_function_call_no_arg(ZxMachine machine, const uint8_t function, ZxValue *result) {
     if (result == NULL || machine == NULL) {
@@ -103,6 +129,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_abs(argument, result);
         case ZX_FUN_CHR_S:
             return zx_function_chr_string(argument, result);
+        case ZX_FUN_VAL_S:
+            return zx_function_val_s_string(machine, argument, result);
     }
 
     return ERR_NOT_YET_IMPLEMENTED;
@@ -119,6 +147,8 @@ ZxError zx_function_call_2_arg(ZxMachine machine, const uint8_t function, const 
     }
 
     switch (function) {
+        case ZX_FUN_ATTR:
+            return ERR_NOT_YET_IMPLEMENTED;
         case ZX_FUN_POINT:
             return ERR_NOT_YET_IMPLEMENTED;
         case ZX_FUN_SCREEN_S:

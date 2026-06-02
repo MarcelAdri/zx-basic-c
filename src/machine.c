@@ -184,14 +184,28 @@ ZxError machine_set_string(ZxMachine machine, const uint8_t var_name, ZxValue *v
     }
 
     int i = name_to_index(var_name);
-    if (i != NOT_FOUND) {
-        if (value->type != ZX_TYPE_STRING) {
-            return ERR_C_NONSENSE_IN_BASIC;
-        }
-        machine->string_variables[i] = *value;
-        return ERR_0_OK;
+    if (i == NOT_FOUND) {
+        return ERR_F_INVALID_FILENAME;
     }
-    return ERR_F_INVALID_FILENAME;
+    if (value->type != ZX_TYPE_STRING) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+    ZxValue *slot = &machine->string_variables[i];
+    zx_free_string(slot);
+
+    uint8_t *parser_text = NULL;
+    size_t text_len = 0;
+    zx_get_string(*value, &parser_text, &text_len);
+
+    uint8_t *machine_text = malloc(text_len);
+    if (machine_text == NULL && text_len > 0) {
+        return ERR_4_OUT_OF_MEMORY;
+    }
+    if (text_len > 0) {
+        memcpy(machine_text, parser_text, text_len);
+    }
+    return zx_assign_string(machine_text, text_len, slot);
 }
 ZxError machine_get_string(ZxMachine machine, const uint8_t var_name, ZxValue *value) {
     if (machine == NULL || value == NULL) {

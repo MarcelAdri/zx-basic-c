@@ -665,7 +665,7 @@ bool is_num_function(const uint8_t c) {
         is_num_function_coordinate_arg(c);
 }
 bool is_string_function_str_argument(const uint8_t c) {
-    if (c == 174) {  //VAL$
+    if (c == ZX_FUN_VAL_S) {
         return true;
     }
     return false;

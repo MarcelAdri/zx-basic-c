@@ -1779,7 +1779,7 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('onSbrkGrow');
 }
 var ASM_CONSTS = {
-  78736: () => { console.log("BINGO! Deze komt 100% zeker aan in F12."); }
+  78752: () => { console.log("BINGO! Deze komt 100% zeker aan in F12."); }
 };
 
 // Imports from the Wasm binary.

@@ -639,8 +639,7 @@ bool is_num_function_num_arg(const uint8_t c) {
 }
 bool is_num_function_no_arg(const uint8_t c) {
     if (c == ZX_FUN_RND ||
-        c == 167     //PI
-        ) {
+        c == ZX_FUN_PI) {
         return true;
     }
     return false;
@@ -657,7 +656,7 @@ bool is_num_function(const uint8_t c) {
     return is_num_function_num_arg(c) || is_num_function_no_arg(c) || is_num_function_str_arg(c);
 }
 bool is_string_function_no_argument(const uint8_t c) {
-    if (c == 166) {   //INKEY$
+    if (c == ZX_FUN_INKEY_S) {
         return true;
     }
     return false;

@@ -7,6 +7,9 @@
 #include "characters.h"
 #include "errors.h"
 
+// De exacte 5-byte ROM waarde van PI op de ZX Spectrum (ROM adres 1A70)
+#define ZX_ROM_PI 3.14159265
+
 static uint32_t generate_random_int(ZxMachine machine);
 
 
@@ -32,6 +35,9 @@ static ZxError zx_function_chr_string(const ZxValue argument, ZxValue *result) {
     }
     const uint8_t text = (uint8_t) arg;
     return zx_assign_string(&text, 1, result);
+}
+static ZxError zx_function_pi(ZxValue *result) {
+    return zx_assign_number(ZX_ROM_PI, result);
 }
 static ZxError zx_function_rnd(ZxMachine machine, ZxValue *result) {
     uint32_t x = generate_random_int(machine);
@@ -59,6 +65,10 @@ ZxError zx_function_call(ZxMachine machine, const uint8_t function, const ZxValu
             return zx_function_abs(argument, result);
         case ZX_FUN_CHR_S:
             return zx_function_chr_string(argument, result);
+        case ZX_FUN_INKEY_S:
+            return ERR_NOT_YET_IMPLEMENTED;
+        case ZX_FUN_PI:
+            return zx_function_pi(result);
         case ZX_FUN_RND:
             return zx_function_rnd(machine, result);
     }

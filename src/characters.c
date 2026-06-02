@@ -600,6 +600,18 @@ bool is_zx_number_character(const uint8_t c) {
     }
     return false;
 }
+bool is_zx_relational_character(const uint8_t c) {
+    if (c == ZX_OP_LESS  ||   // <
+        c == ZX_OP_EQUAL  ||   // =
+        c == ZX_OP_GREATER  ||   // >
+        c == ZX_OP_LESS_EQ ||   // <=
+        c == ZX_OP_GTR_EQ ||   // >=
+        c == ZX_OP_NOT_EQ       // <>
+        ) {
+        return true;
+    }
+    return false;
+}
 bool is_zx_number_start_character(const uint8_t c) {
     if ((c >= 48 && c <= 57) || //0-9
         c == 46) { // .
@@ -619,7 +631,8 @@ bool is_num_function_num_arg(const uint8_t c) {
         c == 186 ||   //INT
         c == 187 ||   //SQR
         c == 188 ||   //SGN
-        c == 189) {   //ABS
+        c == 189 ||   //ABS
+        c == 195) {   //NOT
         return true;
     }
     return false;

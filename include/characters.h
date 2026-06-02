@@ -15,6 +15,23 @@
 #define KEYMAP_MODE_ON_RED 'E'
 #define KEYMAP_MODE_BELOW 'G'
 
+// ZX Spectrum specifieke tekens en tokens
+#define ZX_OP_PLUS       43
+#define ZX_OP_MINUS      45
+#define ZX_OP_MULTIPLY   42
+#define ZX_OP_DIVIDE     47
+
+#define ZX_OP_LESS       60
+#define ZX_OP_EQUAL      61
+#define ZX_OP_GREATER    62
+
+#define ZX_OP_POWER   128
+#define ZX_OP_LESS_EQ 199
+#define ZX_OP_GTR_EQ  200
+#define ZX_OP_NOT_EQ  201
+#define ZX_OP_AND     198
+#define ZX_OP_OR      197
+
 ZxError build_zx_sentence (const uint8_t *characters, size_t length, char *result);
 const char* get_content_from_token (uint8_t token);
 int get_token_from_key (char key, char mode);
@@ -25,6 +42,7 @@ bool is_zx_alnum(uint8_t c);
 bool is_zx_alpha(uint8_t c);
 bool is_zx_space(uint8_t c);
 bool is_zx_number_character(uint8_t c);
+bool is_zx_relational_character(uint8_t c);
 bool is_zx_number_start_character(uint8_t c);
 bool is_zx_plus_character(uint8_t c);
 bool is_zx_minus_character(uint8_t c);

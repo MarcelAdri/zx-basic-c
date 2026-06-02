@@ -8,6 +8,9 @@
 
 #include "errors.h"
 
+#define ZX_TRUE  1.0
+#define ZX_FALSE 0.0
+
 typedef enum {
     ZX_TYPE_NUMBER,
     ZX_TYPE_STRING,

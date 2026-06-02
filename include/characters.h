@@ -32,6 +32,41 @@
 #define ZX_OP_AND     198
 #define ZX_OP_OR      197
 
+//ZX Spectrum functies
+#define ZX_FUN_ABS      189
+#define ZX_FUN_ACS      182
+#define ZX_FUN_ASN      181
+#define ZX_FUN_AT       172
+#define ZX_FUN_ATN      183
+#define ZX_FUN_ATTR     171
+#define ZX_FUN_BIN      196
+#define ZX_FUN_CHR_S    194
+#define ZX_FUN_CODE     175
+#define ZX_FUN_COS      179
+#define ZX_FUN_EXP      185
+#define ZX_FUN_FN       168
+#define ZX_FUN_IN       191
+#define ZX_FUN_INKEY_S  166
+#define ZX_FUN_INT      186
+#define ZX_FUN_LEN      177
+#define ZX_FUN_LN       184
+#define ZX_FUN_NOT      195
+#define ZX_FUN_PEEK     190
+#define ZX_FUN_PI       167
+#define ZX_FUN_POINT    169
+#define ZX_FUN_RND      165
+#define ZX_FUN_SCREEN_S 170
+#define ZX_FUN_SGN      188
+#define ZX_FUN_SIN      178
+#define ZX_FUN_SQR      187
+#define ZX_FUN_STR_S    193
+#define ZX_FUN_TAB      173
+#define ZX_FUN_TAN      180
+#define ZX_FUN_USR      192
+#define ZX_FUN_VAL      176
+#define ZX_FUN_VAL_S    174
+
+
 ZxError build_zx_sentence (const uint8_t *characters, size_t length, char *result);
 const char* get_content_from_token (uint8_t token);
 int get_token_from_key (char key, char mode);

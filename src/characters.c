@@ -631,14 +631,14 @@ bool is_num_function_num_arg(const uint8_t c) {
         c == 186 ||   //INT
         c == 187 ||   //SQR
         c == 188 ||   //SGN
-        c == 189 ||   //ABS
+        c == ZX_FUN_ABS ||
         c == 195) {   //NOT
         return true;
     }
     return false;
 }
 bool is_num_function_no_arg(const uint8_t c) {
-    if (c == 165 ||  //RND
+    if (c == ZX_FUN_RND ||
         c == 167     //PI
         ) {
         return true;
@@ -670,7 +670,7 @@ bool is_string_function_str_argument(const uint8_t c) {
 }
 bool is_string_function_num_argument(const uint8_t c) {
     if (c == 193 || //STR$
-        c == 194) { //CHR$
+        c == ZX_FUN_CHR_S) {
         return true;
     }
     return false;

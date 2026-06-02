@@ -48,6 +48,8 @@ typedef struct Machine {
 
     ZxPrintCallback print_callback;
 
+    uint32_t rng_state;
+
 } Machine;
 
 static void sanitize_variabele_name(char *dest, const char *src, const size_t max_len) {
@@ -102,6 +104,7 @@ ZxMachine machine_create(void) {
         free(machine); // Opruimen als dit faalt!
         return NULL;
     }
+    machine->rng_state = 12345;
 
     return machine;
 }
@@ -207,6 +210,17 @@ ZxError machine_get_string(ZxMachine machine, const uint8_t var_name, ZxValue *v
         return ERR_0_OK;
     }
     return ERR_2_VARIABLE_NOT_FOUND;
+}
+void machine_set_rng_state(ZxMachine machine, uint32_t state) {
+    if (machine != NULL) {
+        machine->rng_state = state;
+    }
+}
+uint32_t machine_get_rng_state(ZxMachine machine) {
+    if (machine != NULL) {
+        return machine->rng_state;
+    }
+    return 0;
 }
 void machine_destroy(ZxMachine machine) {
     if (machine != NULL) {

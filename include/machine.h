@@ -27,6 +27,8 @@ int machine_get_state(ZxMachine machine);
 void machine_set_location(ZxMachine machine, uint16_t line, uint8_t statement);
 uint16_t machine_get_current_line(ZxMachine machine);
 uint8_t machine_get_current_statement(ZxMachine machine);
+void machine_set_rng_state(ZxMachine machine, uint32_t state);
+uint32_t machine_get_rng_state(ZxMachine machine);
 void machine_destroy(ZxMachine machine);
 void machine_next_line(ZxMachine machine);
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback);

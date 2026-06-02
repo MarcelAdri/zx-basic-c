@@ -25,13 +25,13 @@ typedef struct {
     size_t cursor;
 } ParserContext;
 
-ZxError parse_expression(ParserContext *ctx, ZxValue *out_value);
-ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value);
-ZxError parse_relational(ParserContext *ctx, ZxValue *out_value);
-ZxError parse_arithmetic(ParserContext *ctx, ZxValue *out_value);
-ZxError parse_term(ParserContext *ctx, ZxValue *out_value);
-ZxError parse_power(ParserContext *ctx, ZxValue *out_value);
-ZxError parse_factor(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_expression(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_relational(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_arithmetic(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_term(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_power(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value);
 
 // Retourneert 0 als ze gelijk zijn, < 0 als left kleiner is, > 0 als left groter is
 static ZxError zx_compare_strings(int *result, const ZxValue *left, const ZxValue *right) {
@@ -151,7 +151,7 @@ static void zx_skip_spaces(ParserContext *ctx) {
         ctx->cursor++;
     }
 }
-ZxError parse_expression(ParserContext *ctx, ZxValue *out_value) {
+static ZxError parse_expression(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
 
@@ -187,7 +187,7 @@ ZxError parse_expression(ParserContext *ctx, ZxValue *out_value) {
     zx_free_string(&right_value);
     return err;
 }
-ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value) {
+static ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
 
@@ -223,7 +223,7 @@ ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value) {
         zx_free_string(&right_value);
         return err;
 }
-ZxError parse_relational(ParserContext *ctx, ZxValue *out_value) {
+static ZxError parse_relational(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
 
@@ -259,7 +259,7 @@ ZxError parse_relational(ParserContext *ctx, ZxValue *out_value) {
         zx_free_string(&right_value);
         return err;
 }
-ZxError parse_arithmetic(ParserContext *ctx, ZxValue *out_value) {
+static ZxError parse_arithmetic(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
 
@@ -296,7 +296,7 @@ ZxError parse_arithmetic(ParserContext *ctx, ZxValue *out_value) {
         zx_free_string(&right_value);
         return err;
 }
-ZxError parse_term(ParserContext *ctx, ZxValue *out_value) {
+static ZxError parse_term(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
 
@@ -332,7 +332,7 @@ ZxError parse_term(ParserContext *ctx, ZxValue *out_value) {
         zx_free_string(&right_value);
         return err;
 }
-ZxError parse_power(ParserContext *ctx, ZxValue *out_value) {
+static ZxError parse_power(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
 
@@ -366,7 +366,7 @@ ZxError parse_power(ParserContext *ctx, ZxValue *out_value) {
         zx_free_string(&right_value);
         return err;
 }
-ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
+static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
     uint8_t token = ctx->buffer[ctx->cursor];
@@ -411,9 +411,11 @@ ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
         zx_skip_spaces(ctx);
         ZxValue arg;
         zx_init_value(&arg);
-        err = parse_factor(ctx, &arg);
-        if (err != ERR_0_OK) goto error_cleanup;
-        err = zx_function_call(token, arg, out_value);
+        if (!is_num_function_no_arg(token) && !is_string_function_no_argument(token)) {
+            err = parse_factor(ctx, &arg);
+            if (err != ERR_0_OK) goto error_cleanup;
+        }
+        err = zx_function_call(ctx->machine, token, arg, out_value);
         zx_free_string(&arg);
         return err;
     }

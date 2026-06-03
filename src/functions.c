@@ -39,6 +39,12 @@ static ZxError zx_function_chr_string(const ZxValue argument, ZxValue *result) {
     const uint8_t text = (uint8_t) arg;
     return zx_assign_string(&text, 1, result);
 }
+static ZxError zx_function_len(const ZxValue argument, ZxValue *result) {
+    uint8_t *text = NULL;
+    size_t text_len = 0;
+    zx_get_string(argument, &text, &text_len);
+    return zx_assign_number(text_len, result);
+}
 static ZxError zx_function_pi(ZxValue *result) {
     return zx_assign_number(ZX_ROM_PI, result);
 }
@@ -129,6 +135,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_abs(argument, result);
         case ZX_FUN_CHR_S:
             return zx_function_chr_string(argument, result);
+        case ZX_FUN_LEN:
+            return zx_function_len(argument, result);
         case ZX_FUN_VAL_S:
             return zx_function_val_s_string(machine, argument, result);
     }

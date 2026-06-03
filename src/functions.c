@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <math.h>
 #include "functions.h"
 #include "characters.h"
 #include "errors.h"
@@ -68,6 +69,14 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
     }
     const uint8_t *screen = machine_get_from_screen(machine, (uint8_t)y_val, (uint8_t)x_val);
     return zx_assign_string(screen, 1, result);
+}
+static ZxError zx_function_sin(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    return zx_assign_number(sin(arg), result);
 }
 static ZxError zx_function_val_s_string(ZxMachine machine, const ZxValue argument, ZxValue *result) {
     uint8_t *expr_text = NULL;
@@ -137,6 +146,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_chr_string(argument, result);
         case ZX_FUN_LEN:
             return zx_function_len(argument, result);
+        case ZX_FUN_SIN:
+            return zx_function_sin(argument, result);
         case ZX_FUN_VAL_S:
             return zx_function_val_s_string(machine, argument, result);
     }

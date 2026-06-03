@@ -86,6 +86,17 @@ static ZxError zx_function_sin(const ZxValue argument, ZxValue *result) {
     }
     return zx_assign_number(sin(arg), result);
 }
+static ZxError zx_function_sqr(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    if (arg < 0) {
+        return ERR_A_INVALID_ARGUMENT;
+    }
+    return zx_assign_number(sqrt(arg), result);
+}
 static ZxError zx_function_tan(ZxMachine machine, const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -193,6 +204,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_len(argument, result);
         case ZX_FUN_SIN:
             return zx_function_sin(argument, result);
+        case ZX_FUN_SQR:
+            return zx_function_sqr(argument, result);
         case ZX_FUN_TAN:
             return zx_function_tan(machine, argument, result);
         case ZX_FUN_VAL_S:

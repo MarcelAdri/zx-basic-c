@@ -622,7 +622,7 @@ bool is_zx_number_start_character(const uint8_t c) {
 bool is_num_function_num_arg(const uint8_t c) {
     if (c == ZX_FUN_SIN ||
         c == ZX_FUN_COS ||
-        c == 180 ||   //TAN
+        c == ZX_FUN_TAN ||
         c == 181 ||   //ASN
         c == 182 ||   //ACS
         c == 183 ||   //ATN

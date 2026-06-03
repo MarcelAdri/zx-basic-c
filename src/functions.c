@@ -86,6 +86,41 @@ static ZxError zx_function_sin(const ZxValue argument, ZxValue *result) {
     }
     return zx_assign_number(sin(arg), result);
 }
+static ZxError zx_function_tan(ZxMachine machine, const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    ZxValue arg_sin;
+    zx_init_value(&arg_sin);
+    err = zx_function_call_1_arg(machine, ZX_FUN_SIN, argument, &arg_sin);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double arg_sin_value;
+    err = zx_get_number(arg_sin, &arg_sin_value);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    ZxValue arg_cos;
+    zx_init_value(&arg_cos);
+    err = zx_function_call_1_arg(machine, ZX_FUN_COS, argument, &arg_cos);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double arg_cos_value;
+    err = zx_get_number(arg_cos, &arg_cos_value);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    if (arg_cos_value == 0) {
+        return ERR_6_NUMBER_TOO_BIG;
+    }
+
+    return zx_assign_number(arg_sin_value / arg_cos_value, result);
+}
 static ZxError zx_function_val_s_string(ZxMachine machine, const ZxValue argument, ZxValue *result) {
     uint8_t *expr_text = NULL;
     size_t expr_len = 0;
@@ -158,6 +193,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_len(argument, result);
         case ZX_FUN_SIN:
             return zx_function_sin(argument, result);
+        case ZX_FUN_TAN:
+            return zx_function_tan(machine, argument, result);
         case ZX_FUN_VAL_S:
             return zx_function_val_s_string(machine, argument, result);
     }

@@ -3,6 +3,9 @@
 //
 
 #include <math.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include "zx_types.h"
 
 #include <stdlib.h>
@@ -10,19 +13,43 @@
 
 #include "characters.h"
 #include "errors.h"
-#include "helpers.h"
-#include "machine.h"
 
-static ZxError zx_make_number(const double val, ZxValue *out_value) {
-    if (isinf(val) || val > 1.7e38 || val < -1.7e38) {
-        return ERR_6_NUMBER_TOO_BIG;
+static ZxError zx_make_number(double val, ZxValue *out_value) {
+    //zx_max_number is a cached value for the maximum representable number in ZX Spectrum BASIC (calculated 5byte float)
+    static double zx_max_number = 0;
+    static bool zx_max_number_set = false;
+
+    if (!zx_max_number_set) {
+        zx_max_number = (1.0 - pow(2, -32)) * pow(2, 127);
+        zx_max_number_set = true;
+    }
+
+    //zx_min_number is a cached value for the smallest representable number in ZX Spectrum BASIC (calculated 5byte float)
+    static double zx_min_number = 0;
+    static bool zx_min_number_set = false;
+    if (!zx_min_number_set) {
+        zx_min_number = pow(2, -128);
+        zx_min_number_set = true;
     }
     if (isnan(val)) {
+
         return ERR_A_INVALID_ARGUMENT;
     }
+    if (isinf(val) || val > zx_max_number || val < -zx_max_number) {
+        return ERR_6_NUMBER_TOO_BIG;
+    }
+    if ((val > 0 && val < zx_min_number) || (val < 0 && val > -zx_min_number)) {
+        val = 0;
+    }
+
+    //limit precision to 9 decimals
+    char buf[32];
+    sprintf(buf, "%.9g", val);
+    double quirky_value = strtod(buf, NULL);
+
 
     out_value->type = ZX_TYPE_NUMBER;
-    out_value->data.number = val;
+    out_value->data.number = quirky_value;
     return ERR_0_OK;
 }
 

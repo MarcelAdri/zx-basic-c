@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <locale.h>
 
 #include "machine.h"
 #include "version.h"
@@ -108,9 +109,8 @@ const char* UI_get_version(void) {
 }
 
 int main(void) {
-    EM_ASM({
-        console.log("BINGO! Deze komt 100% zeker aan in F12.");
-    });
+    setlocale(LC_NUMERIC, "C");
+
     printf("ZX Spectrum BASIC WASM Module Geladen. v%s\n", ZX_BASIC_VERSION);
     return 0;
 }

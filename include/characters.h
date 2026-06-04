@@ -33,6 +33,9 @@
 #define ZX_OP_OR      197
 #define ZX_OP_NOT     195
 
+#define ZX_TOKEN_BIN      196
+
+
 //ZX Spectrum functies
 #define ZX_FUN_ABS      189
 #define ZX_FUN_ACS      182
@@ -40,7 +43,6 @@
 #define ZX_FUN_AT       172
 #define ZX_FUN_ATN      183
 #define ZX_FUN_ATTR     171
-#define ZX_FUN_BIN      196
 #define ZX_FUN_CHR_S    194
 #define ZX_FUN_CODE     175
 #define ZX_FUN_COS      179

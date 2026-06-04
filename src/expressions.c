@@ -448,7 +448,42 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
         zx_free_string(&value);
         return zx_assign_number(value_number, out_value);
     }
+    if (ctx->buffer[ctx->cursor] == ZX_TOKEN_BIN) {
+        ctx->cursor++;
+        zx_skip_spaces(ctx);
 
+        uint32_t total_digits = 0;
+        uint32_t bin_value = 0;
+        uint32_t significant_bits = 0;
+        bool started_significant = false;
+
+        while (ctx->buffer[ctx->cursor] == get_token_from_key('0', KEYMAP_MODE_LITERAL) ||
+            ctx->buffer[ctx->cursor] == get_token_from_key('1', KEYMAP_MODE_LITERAL)) {
+            char bit = ctx->buffer[ctx->cursor];
+            ctx->cursor++;
+            total_digits++;
+
+            if (bit == get_token_from_key('1', KEYMAP_MODE_LITERAL)) {
+                started_significant = true;
+            }
+
+            if (started_significant) {
+                significant_bits++;
+            }
+
+            bin_value = (bin_value << 1) | (bit - '0');
+        }
+
+        if (total_digits == 0) {
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+
+        if (significant_bits > 16 || bin_value > 65535) {
+            return ERR_6_NUMBER_TOO_BIG;
+        }
+
+        return zx_assign_number((double)bin_value, out_value);
+    }
     if (is_function(token)) {
         ctx->cursor++;
         zx_skip_spaces(ctx);

@@ -561,40 +561,41 @@ bool is_zx_space(const uint8_t c) {
     return false;
 }
 bool is_zx_plus_character(const uint8_t c) {
-    if (c == 43) {
+    if (c == ZX_OP_PLUS) {
         return true;
     }
     return false;
 }
 bool is_zx_minus_character(const uint8_t c) {
-    if (c == 45) {
+    if (c == ZX_OP_MINUS) {
         return true;
     }
     return false;
 }
 bool is_zx_asterisk_character(const uint8_t c) {
-    if (c == 42) {
+    if (c == ZX_OP_MULTIPLY) {
         return true;
     }
     return false;
 }
 bool is_zx_slash_character(const uint8_t c) {
-    if (c == 47) {
+    if (c == ZX_OP_DIVIDE) {
         return true;
     }
     return false;
 }
 bool is_zx_power_character(const uint8_t c) {
-    if (c == 128) {
+    if (c == ZX_OP_POWER) {
         return true;
     }
     return false;
 }
 bool is_zx_number_character(const uint8_t c) {
-    if ((c >= 48 && c <= 57) ||
-        c == 46 ||
-        c == 69 ||
-        c == 101
+    if ((c >= 48 && c <= 57) ||  //0-9
+        c == 46 ||               //.
+        c == 44 ||               //,
+        c == 69 ||               //E
+        c == 101                 //e
         ) {
         return true;
     }
@@ -628,7 +629,9 @@ bool is_num_function_num_arg(const uint8_t c) {
         c == ZX_FUN_ATN ||
         c == ZX_FUN_LN ||
         c == ZX_FUN_EXP ||
+        c == ZX_FUN_IN ||
         c == ZX_FUN_INT ||
+        c == ZX_FUN_PEEK ||
         c == ZX_FUN_SQR ||
         c == ZX_FUN_SGN ||
         c == ZX_FUN_ABS ||
@@ -646,6 +649,7 @@ bool is_num_function_no_arg(const uint8_t c) {
 }
 bool is_num_function_str_arg(const uint8_t c) {
     if (c == 176 ||  //VAL
+        c == ZX_FUN_USR ||
         c == ZX_FUN_LEN
         ) {
         return true;
@@ -670,7 +674,7 @@ bool is_string_function_str_argument(const uint8_t c) {
     return false;
 }
 bool is_string_function_num_argument(const uint8_t c) {
-    if (c == 193 || //STR$
+    if (c == ZX_FUN_STR_S ||
         c == ZX_FUN_CHR_S) {
         return true;
     }

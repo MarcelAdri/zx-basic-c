@@ -10,6 +10,7 @@
 #include "errors.h"
 #include "machine.h"
 #include "expressions.h"
+#include "helpers.h"
 
 // De exacte 5-byte ROM waarde van PI op de ZX Spectrum (ROM adres 1A70)
 #define ZX_ROM_PI 3.14159265
@@ -255,6 +256,18 @@ static ZxError zx_function_sqr(const ZxValue argument, ZxValue *result) {
     }
     return zx_assign_number(sqrt(arg), result);
 }
+static ZxError zx_function_str_s(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) return err;
+
+    uint8_t zx_tokens[32];
+    size_t bytes_written = 0;
+    err = formatted_number(arg, zx_tokens, sizeof(zx_tokens), &bytes_written);
+    if (err != ERR_0_OK) return err;
+
+    return zx_assign_string(zx_tokens, bytes_written, result);
+}
 static ZxError zx_function_tan(ZxMachine machine, const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -366,20 +379,28 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_cos(argument, result);
         case ZX_FUN_EXP:
             return zx_function_exp(argument, result);
+        case ZX_FUN_IN:
+            return ERR_NOT_YET_IMPLEMENTED;
         case ZX_FUN_INT:
             return zx_function_int(argument, result);
         case ZX_FUN_LEN:
             return zx_function_len(argument, result);
         case ZX_FUN_LN:
             return zx_function_ln(argument, result);
+        case ZX_FUN_PEEK:
+            return ERR_NOT_YET_IMPLEMENTED;
         case ZX_FUN_SGN:
             return zx_function_sgn(argument, result);
         case ZX_FUN_SIN:
             return zx_function_sin(argument, result);
         case ZX_FUN_SQR:
             return zx_function_sqr(argument, result);
+        case ZX_FUN_STR_S:
+            return zx_function_str_s(argument, result);
         case ZX_FUN_TAN:
             return zx_function_tan(machine, argument, result);
+        case ZX_FUN_USR:
+            return ERR_NOT_YET_IMPLEMENTED;
         case ZX_FUN_VAL_S:
             return zx_function_val_s_string(machine, argument, result);
     }

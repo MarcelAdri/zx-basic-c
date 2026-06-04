@@ -27,6 +27,7 @@ typedef struct {
 
 static ZxError parse_expression(ParserContext *ctx, ZxValue *out_value);
 static ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value);
+static ZxError parse_logical_not(ParserContext *ctx, ZxValue *out_value);
 static ZxError parse_relational(ParserContext *ctx, ZxValue *out_value);
 static ZxError parse_arithmetic(ParserContext *ctx, ZxValue *out_value);
 static ZxError parse_term(ParserContext *ctx, ZxValue *out_value);
@@ -126,19 +127,20 @@ static ZxError zx_calculate(uint8_t operator, ZxValue *left, ZxValue *right) {
     if (err != ERR_0_OK) return err;
 
     switch (operator) {
-        case ZX_OP_PLUS: lv += rv; break;                                            //+
-        case ZX_OP_MINUS: lv -= rv; break;                                            //-
-        case ZX_OP_MULTIPLY: lv *= rv; break;                                            //*
-        case ZX_OP_DIVIDE: lv /= rv; break;                                            // /
-        case ZX_OP_POWER: lv = pow(lv, rv); break;                               //↑
-        case ZX_OP_LESS: lv = (lv < rv) ? ZX_TRUE : ZX_FALSE; break;                 //<
-        case ZX_OP_EQUAL: lv = (lv == rv) ? ZX_TRUE : ZX_FALSE; break;                //=
-        case ZX_OP_GREATER: lv = (lv > rv) ? ZX_TRUE : ZX_FALSE; break;                 //>
-        case ZX_OP_LESS_EQ: lv = (lv <= rv) ? ZX_TRUE : ZX_FALSE; break;               //<=
-        case ZX_OP_GTR_EQ: lv = (lv >= rv) ? ZX_TRUE : ZX_FALSE; break;               //>=
-        case ZX_OP_NOT_EQ: lv = (lv != rv) ? ZX_TRUE : ZX_FALSE; break;               //<>
-        case ZX_OP_AND: lv = (rv == ZX_FALSE) ? ZX_FALSE : lv; break;                 //AND
-        case ZX_OP_OR: lv = (rv == ZX_FALSE) ? lv : ZX_TRUE; break;                   //OR
+        case ZX_OP_PLUS: lv += rv; break;
+        case ZX_OP_MINUS: lv -= rv; break;
+        case ZX_OP_MULTIPLY: lv *= rv; break;
+        case ZX_OP_DIVIDE: lv /= rv; break;
+        case ZX_OP_POWER: lv = pow(lv, rv); break;
+        case ZX_OP_LESS: lv = (lv < rv) ? ZX_TRUE : ZX_FALSE; break;
+        case ZX_OP_EQUAL: lv = (lv == rv) ? ZX_TRUE : ZX_FALSE; break;
+        case ZX_OP_GREATER: lv = (lv > rv) ? ZX_TRUE : ZX_FALSE; break;
+        case ZX_OP_LESS_EQ: lv = (lv <= rv) ? ZX_TRUE : ZX_FALSE; break;
+        case ZX_OP_GTR_EQ: lv = (lv >= rv) ? ZX_TRUE : ZX_FALSE; break;
+        case ZX_OP_NOT_EQ: lv = (lv != rv) ? ZX_TRUE : ZX_FALSE; break;
+        case ZX_OP_AND: lv = (rv == ZX_FALSE) ? ZX_FALSE : lv; break;
+        case ZX_OP_OR: lv = (rv == ZX_FALSE) ? lv : ZX_TRUE; break;
+        case ZX_OP_NOT: lv = (lv == ZX_FALSE) ? ZX_TRUE : ZX_FALSE; break;
 
         default: return ERR_C_NONSENSE_IN_BASIC;
     }
@@ -196,7 +198,7 @@ static ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value) {
     ZxValue right_value;
     zx_init_value(&right_value);
 
-    err = parse_relational(ctx, &left_value);
+    err = parse_logical_not(ctx, &left_value);
     if (err != ERR_0_OK) goto error_cleanup;
 
     while (ctx->buffer[ctx->cursor] == ZX_OP_AND) {
@@ -205,7 +207,7 @@ static ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value) {
         ctx->cursor++;
         zx_skip_spaces(ctx);
 
-        err = parse_relational(ctx, &right_value);
+        err = parse_logical_not(ctx, &right_value);
         if (err != ERR_0_OK) goto error_cleanup;
 
         err = zx_calculate(operator, &left_value, &right_value);
@@ -222,6 +224,47 @@ static ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value) {
         zx_free_string(&left_value);
         zx_free_string(&right_value);
         return err;
+}
+static ZxError parse_logical_not(ParserContext *ctx, ZxValue *out_value) {
+    if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
+    ZxError err;
+
+    if (ctx->buffer[ctx->cursor] == ZX_OP_NOT) {
+        ctx->cursor++;
+        zx_skip_spaces(ctx);
+
+        ZxValue operand_value;
+        zx_init_value(&operand_value);
+
+        err = parse_logical_not(ctx, &operand_value);
+        if (err != ERR_0_OK) {
+            zx_free_string(&operand_value);
+            return err;
+        }
+
+        ZxValue dummy_right;
+        zx_init_value(&dummy_right);
+        err = zx_assign_number(0, &dummy_right);
+        if (err != ERR_0_OK) {
+            zx_free_string(&operand_value);
+            zx_free_string(&dummy_right);
+            return err;
+        }
+        err = zx_calculate(ZX_OP_NOT, &operand_value, &dummy_right);
+        zx_free_string(&dummy_right);
+        if (err != ERR_0_OK) {
+            zx_free_string(&operand_value);
+            zx_free_string(&dummy_right);
+            return err;
+        }
+
+        *out_value = operand_value;
+        return ERR_0_OK;
+    }
+
+    // 3. Staat er geen NOT? Dan stromen we plichtsgetrouw door
+    // naar de hogere prioriteit: de relationele operatoren (=, <, >, etc.)
+    return parse_relational(ctx, out_value);
 }
 static ZxError parse_relational(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;

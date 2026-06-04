@@ -634,8 +634,7 @@ bool is_num_function_num_arg(const uint8_t c) {
         c == ZX_FUN_PEEK ||
         c == ZX_FUN_SQR ||
         c == ZX_FUN_SGN ||
-        c == ZX_FUN_ABS ||
-        c == 195) {   //NOT
+        c == ZX_FUN_ABS) {
         return true;
     }
     return false;

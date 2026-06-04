@@ -31,6 +31,7 @@
 #define ZX_OP_NOT_EQ  201
 #define ZX_OP_AND     198
 #define ZX_OP_OR      197
+#define ZX_OP_NOT     195
 
 //ZX Spectrum functies
 #define ZX_FUN_ABS      189
@@ -50,7 +51,6 @@
 #define ZX_FUN_INT      186
 #define ZX_FUN_LEN      177
 #define ZX_FUN_LN       184
-#define ZX_FUN_NOT      195
 #define ZX_FUN_PEEK     190
 #define ZX_FUN_PI       167
 #define ZX_FUN_POINT    169

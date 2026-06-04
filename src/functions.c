@@ -28,6 +28,55 @@ static ZxError zx_function_abs(const ZxValue argument, ZxValue *result) {
     return zx_assign_number(res, result);
 
 }
+static ZxError zx_function_acs(ZxMachine machine, const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    if (arg < -1.0 || arg > 1.0) {
+        return ERR_A_INVALID_ARGUMENT;
+    }
+
+    //Calculate (pi / 2) + ASN(-arg)
+
+    //retrieve pi
+    ZxValue pi;
+    zx_init_value(&pi);
+    err = zx_function_call_no_arg(machine, ZX_FUN_PI, &pi);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double pi_value;
+    err = zx_get_number(pi, &pi_value);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //Make -arg
+    ZxValue neg_arg;
+    zx_init_value(&neg_arg);
+    err = zx_assign_number(-arg, &neg_arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //retrieve ASN(-arg)
+    ZxValue asn_arg_neg;
+    zx_init_value(&asn_arg_neg);
+    err = zx_function_call_1_arg(machine, ZX_FUN_ASN, neg_arg, &asn_arg_neg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double asn_arg_neg_value;
+    err = zx_get_number(asn_arg_neg, &asn_arg_neg_value);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //return calculation
+    return zx_assign_number(pi_value / 2.0 + asn_arg_neg_value, result);
+}
 static ZxError zx_function_asn(ZxMachine machine, const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -268,6 +317,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
     switch (function) {
         case ZX_FUN_ABS:
             return zx_function_abs(argument, result);
+        case ZX_FUN_ACS:
+            return zx_function_acs(machine, argument, result);
         case ZX_FUN_ASN:
             return zx_function_asn(machine, argument, result);
         case ZX_FUN_ATN:

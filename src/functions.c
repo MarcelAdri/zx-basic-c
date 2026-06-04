@@ -28,6 +28,70 @@ static ZxError zx_function_abs(const ZxValue argument, ZxValue *result) {
     return zx_assign_number(res, result);
 
 }
+static ZxError zx_function_asn(ZxMachine machine, const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    if (arg < -1.0 || arg > 1.0) {
+        return ERR_A_INVALID_ARGUMENT;
+    }
+
+    //retrieve PI value
+    ZxValue pi;
+    zx_init_value(&pi);
+    err = zx_function_call_no_arg(machine, ZX_FUN_PI, &pi);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double pi_value;
+    err = zx_get_number(pi, &pi_value);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //Hardcoded avoidance of division by 0
+    if (arg == 1.0) {
+        return zx_assign_number(pi_value / 2.0, result);
+    }
+    if (arg == -1.0) {
+        return zx_assign_number(-pi_value / 2.0, result);
+    }
+
+    //ASN: ATN(arg / SQR(1 - arg*arg)
+    ZxValue one_minus_x2, sqrt_val, division_val;
+    zx_init_value(&one_minus_x2);
+    zx_init_value(&sqrt_val);
+    zx_init_value(&division_val);
+
+    //calculate (1 - arg*arg)
+    err = zx_assign_number(1.0 - arg*arg, &one_minus_x2);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //calculate sqrt(1 - arg*arg)
+    err = zx_function_call_1_arg(machine, ZX_FUN_SQR, one_minus_x2, &sqrt_val);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double sqrt_value;
+    err = zx_get_number(sqrt_val, &sqrt_value);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //calculate arg / SQR(1 - arg*arg)
+    err = zx_assign_number(arg / sqrt_value, &division_val);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //calculate ATN(division_value)
+    return zx_function_call_1_arg(machine, ZX_FUN_ATN, division_val, result);
+}
 static ZxError zx_function_atn(const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -204,6 +268,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
     switch (function) {
         case ZX_FUN_ABS:
             return zx_function_abs(argument, result);
+        case ZX_FUN_ASN:
+            return zx_function_asn(machine, argument, result);
         case ZX_FUN_ATN:
             return zx_function_atn(argument, result);
         case ZX_FUN_CHR_S:

@@ -623,7 +623,7 @@ bool is_num_function_num_arg(const uint8_t c) {
     if (c == ZX_FUN_SIN ||
         c == ZX_FUN_COS ||
         c == ZX_FUN_TAN ||
-        c == 181 ||   //ASN
+        c == ZX_FUN_ASN ||
         c == 182 ||   //ACS
         c == ZX_FUN_ATN ||
         c == 184 ||   //LN

@@ -228,6 +228,14 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
     const uint8_t *screen = machine_get_from_screen(machine, (uint8_t)y_val, (uint8_t)x_val);
     return zx_assign_string(screen, 1, result);
 }
+static ZxError zx_function_sgn(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    return zx_assign_number(arg < 0 ? -1 : arg > 0 ? 1 : 0, result);
+}
 static ZxError zx_function_sin(const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -364,6 +372,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_len(argument, result);
         case ZX_FUN_LN:
             return zx_function_ln(argument, result);
+        case ZX_FUN_SGN:
+            return zx_function_sgn(argument, result);
         case ZX_FUN_SIN:
             return zx_function_sin(argument, result);
         case ZX_FUN_SQR:

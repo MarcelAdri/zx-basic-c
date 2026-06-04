@@ -28,6 +28,14 @@ static ZxError zx_function_abs(const ZxValue argument, ZxValue *result) {
     return zx_assign_number(res, result);
 
 }
+static ZxError zx_function_atn(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    return zx_assign_number(atan(arg), result);
+}
 static ZxError zx_function_chr_string(const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -196,6 +204,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
     switch (function) {
         case ZX_FUN_ABS:
             return zx_function_abs(argument, result);
+        case ZX_FUN_ATN:
+            return zx_function_atn(argument, result);
         case ZX_FUN_CHR_S:
             return zx_function_chr_string(argument, result);
         case ZX_FUN_COS:

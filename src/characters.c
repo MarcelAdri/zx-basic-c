@@ -626,7 +626,7 @@ bool is_num_function_num_arg(const uint8_t c) {
         c == ZX_FUN_ASN ||
         c == ZX_FUN_ACS ||
         c == ZX_FUN_ATN ||
-        c == 184 ||   //LN
+        c == ZX_FUN_LN ||
         c == 185 ||   //EXP
         c == 186 ||   //INT
         c == ZX_FUN_SQR ||

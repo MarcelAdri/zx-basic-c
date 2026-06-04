@@ -175,6 +175,17 @@ static ZxError zx_function_len(const ZxValue argument, ZxValue *result) {
     zx_get_string(argument, &text, &text_len);
     return zx_assign_number((double)text_len, result);
 }
+static ZxError zx_function_ln(const ZxValue argument, ZxValue *result) {
+    double arg;
+    ZxError err = zx_get_number(argument, &arg);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    if (arg <= 0) {
+        return ERR_A_INVALID_ARGUMENT;
+    }
+    return zx_assign_number(log(arg), result);
+}
 static ZxError zx_function_pi(ZxValue *result) {
     return zx_assign_number(ZX_ROM_PI, result);
 }
@@ -329,6 +340,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_cos(argument, result);
         case ZX_FUN_LEN:
             return zx_function_len(argument, result);
+        case ZX_FUN_LN:
+            return zx_function_ln(argument, result);
         case ZX_FUN_SIN:
             return zx_function_sin(argument, result);
         case ZX_FUN_SQR:

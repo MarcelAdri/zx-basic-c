@@ -171,6 +171,18 @@ static ZxError zx_function_cos(const ZxValue argument, ZxValue *result) {
     }
     return zx_assign_number(cos(arg), result);
 }
+static ZxError zx_function_code(const ZxValue argument, ZxValue *result) {
+    if (argument.type != ZX_TYPE_STRING) return ERR_A_INVALID_ARGUMENT;
+
+    double res;
+    uint8_t *arg = NULL;
+    size_t arg_len = 0;
+    ZxError err = zx_get_string(argument, &arg, &arg_len);
+    if (err != ERR_0_OK) return err;
+    if (arg_len < 1) return ERR_A_INVALID_ARGUMENT;
+
+    return zx_assign_number((double)arg[0], result);
+}
 static ZxError zx_function_exp(const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -402,6 +414,8 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_atn(argument, result);
         case ZX_FUN_CHR_S:
             return zx_function_chr_string(argument, result);
+        case ZX_FUN_CODE:
+            return zx_function_code(argument, result);
         case ZX_FUN_COS:
             return zx_function_cos(argument, result);
         case ZX_FUN_EXP:

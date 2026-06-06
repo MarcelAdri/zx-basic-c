@@ -27,6 +27,7 @@ const uint8_t* machine_get_from_text_screen(ZxMachine machine, uint8_t y, uint8_
 const uint8_t* machine_get_from_system_screen(ZxMachine machine, uint8_t y, uint8_t x);
 int machine_get_state(ZxMachine machine);
 void machine_set_location(ZxMachine machine, uint16_t line, uint8_t statement);
+ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8_t *tokens, size_t length);
 uint16_t machine_get_current_line(ZxMachine machine);
 uint8_t machine_get_current_statement(ZxMachine machine);
 void machine_set_rng_state(ZxMachine machine, uint32_t state);

@@ -16,6 +16,14 @@
 
 #define NOT_FOUND (-1)
 
+#define ZX_MAX_BASIC_RAM 41500
+
+typedef struct {
+    uint8_t *tokens;
+    size_t length;
+    bool exists;
+} ZxLine;
+
 typedef struct {
     char name[MAX_VAR_NAME_LEN];       // We reserveren max. 99 tekens voor de naam (+ '\0')
     ZxValue value;
@@ -37,6 +45,9 @@ typedef struct Machine {
 
     uint8_t text_cursor_x;
     uint8_t text_cursor_y;
+
+    ZxLine program_memory[10000];
+    size_t used_basic_ram;
 
     uint16_t current_line;
     uint8_t current_statement;
@@ -121,7 +132,33 @@ void machine_set_location(ZxMachine machine, const uint16_t line, const uint8_t 
         machine->current_statement = statement;
     }
 }
+ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8_t *tokens, size_t length) {
+    size_t new_line_cost = length + 5;
 
+    size_t old_line_cost = 0;
+    if (machine->program_memory[line_number].exists) {
+        old_line_cost = machine->program_memory[line_number].length + 5;
+    }
+
+    size_t projected_ram = (machine->used_basic_ram - old_line_cost) + new_line_cost;
+
+    if (projected_ram > ZX_MAX_BASIC_RAM) {
+        return ERR_G_NO_ROOM_FOR_LINE;
+    }
+
+    if (machine->program_memory[line_number].exists) {
+        free(machine->program_memory[line_number].tokens);
+    }
+
+    machine->program_memory[line_number].tokens = malloc(length);
+    memcpy(machine->program_memory[line_number].tokens, tokens, length);
+    machine->program_memory[line_number].length = length;
+    machine->program_memory[line_number].exists = true;
+
+    machine->used_basic_ram = projected_ram;
+
+    return ERR_0_OK;
+}
 uint16_t machine_get_current_line(ZxMachine machine) {
     return machine ? machine->current_line : 0;
 }

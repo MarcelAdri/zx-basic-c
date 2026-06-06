@@ -81,6 +81,7 @@ bool is_zx_alnum(uint8_t c);
 bool is_zx_alpha(uint8_t c);
 bool is_zx_space(uint8_t c);
 bool is_zx_number_character(uint8_t c);
+bool is_zx_digit_character(uint8_t c);
 bool is_zx_relational_character(uint8_t c);
 bool is_zx_number_start_character(uint8_t c);
 bool is_zx_plus_character(uint8_t c);

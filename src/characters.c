@@ -636,6 +636,12 @@ bool is_zx_power_character(const uint8_t c) {
     }
     return false;
 }
+bool is_zx_digit_character(const uint8_t c) {
+    if (c >= 48 && c <= 57) {
+        return true;
+    }
+    return false;
+}
 bool is_zx_number_character(const uint8_t c) {
     if ((c >= 48 && c <= 57) ||  //0-9
         c == 46 ||               //.

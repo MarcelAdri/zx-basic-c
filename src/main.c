@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <locale.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "machine.h"
@@ -19,6 +20,16 @@
     #define EM_ASM_(...)
 #endif
 
+static void machine_print_error(ZxMachine machine, ZxError err) {
+    const char *msg = get_zx_error_message(err);
+    uint16_t cur_line = machine_get_current_line(machine);
+    uint8_t stmt = machine_get_current_statement(machine);
+
+    char sys_msg[64];
+    snprintf(sys_msg, sizeof(sys_msg), "%s, %u:%d", msg, cur_line, stmt);
+
+    machine_print_to_system(machine, sys_msg);
+}
 void ons_systeem_print_kanaal(const char *text) {
     printf("%s", text);
 }
@@ -150,20 +161,58 @@ EMSCRIPTEN_KEEPALIVE
 void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
     if (machine == NULL || buffer == NULL || size == 0) return;
 
-    // 1. Voer de BASIC code uit!
-    ZxError err = execute(machine, buffer, size);
+    size_t i = 0;
+    while (i < size && is_zx_space(buffer[i])) {
+        i++;
+    }
+    if (i >= size) return;
+    uint16_t line = 0;
+    if (is_zx_digit_character(buffer[i])) {
+        char line_number[5];
+        size_t j = 0;
+        while (i < size && is_zx_digit_character(buffer[i])) {
+            if (j < sizeof(line_number)) {
+                line_number[j++] = (char)buffer[i++];
+            } else {
+                i++;
+                j++;
+            }
+        }
+        if (j > sizeof(line_number) - 1) {
+            ZxError err = ERR_B_INTEGER_OUT_OF_RANGE;
+            machine_print_error(machine, err);
+            return;
+        } else {
+            line_number[j] = '\0';
+            line = atoi(line_number);
+        }
 
-    // 2. Haal de foutmelding op (bijv "0 OK" of "C Nonsense in BASIC")
-    const char *msg = get_zx_error_message(err);
-    uint16_t line = machine_get_current_line(machine);
-    uint8_t stmt = machine_get_current_statement(machine);
+    }
+    if (line == 0) {
+        ZxError err = execute(machine, buffer + i, size - i);
+        machine_print_error(machine, err);
 
-    // 3. Formatteer hem zoals een echte Spectrum (met statement pointer)
-    char sys_msg[64];
-    snprintf(sys_msg, sizeof(sys_msg), "%s, %u:%d", msg, line, stmt);
+    } else {
+        if (i >= size) {
+            //todo: wis regel
+            machine_print_to_system(machine, "0 OK, 0:1");
+        } else {
+            ZxError err = machine_insert_line(machine, line, buffer + i, size - i);
+            if (err != ERR_0_OK) {
+                machine_print_error(machine, err);
+            } else {
+                ZxValue zx_line;
+                zx_init_value(&zx_line);
+                zx_assign_string(buffer, size, &zx_line);
+                machine_print_value(machine, zx_line);
+                machine_next_line(machine);
+                zx_free_string(&zx_line);
 
-    // 4. Stuur hem naar het systeem-scherm
-    machine_print_to_system(machine, sys_msg);
+                machine_print_error(machine, ERR_0_OK);
+            }
+        }
+    }
+
 }
 EMSCRIPTEN_KEEPALIVE
 const char* UI_get_version(void) {

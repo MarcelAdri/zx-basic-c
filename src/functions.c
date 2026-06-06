@@ -12,6 +12,7 @@
 #include "machine.h"
 #include "expressions.h"
 #include "helpers.h"
+#include "zx_types.h"
 
 // De exacte 5-byte ROM waarde van PI op de ZX Spectrum (ROM adres 1A70)
 #define ZX_ROM_PI 3.14159265
@@ -172,8 +173,6 @@ static ZxError zx_function_cos(const ZxValue argument, ZxValue *result) {
     return zx_assign_number(cos(arg), result);
 }
 static ZxError zx_function_code(const ZxValue argument, ZxValue *result) {
-    if (argument.type != ZX_TYPE_STRING) return ERR_A_INVALID_ARGUMENT;
-
     double res;
     uint8_t *arg = NULL;
     size_t arg_len = 0;
@@ -340,11 +339,25 @@ static ZxError zx_function_usr(const ZxValue argument, ZxValue *result) {
 
     return ERR_C_NONSENSE_IN_BASIC;
 }
-static ZxError zx_function_val_s_string(ZxMachine machine, const ZxValue argument, ZxValue *result) {
+static ZxError zx_function_val(ZxMachine machine, const ZxValue argument, ZxValue *result) {
+    ZxError err;
+
+    uint8_t *arg = NULL;
+    size_t arg_len = 0;
+    err = zx_get_string(argument, &arg, &arg_len);
+    if (err != ERR_0_OK) return err;
+
+    size_t dummy_bytes_read = 0;
+    err = solve_expression(machine, arg, arg_len, result, &dummy_bytes_read);
+    if (err != ERR_0_OK) return err;
+    if (result->type != ZX_TYPE_NUMBER) return ERR_A_INVALID_ARGUMENT;
+
+    return ERR_0_OK;
+}
+static ZxError zx_function_val_s(ZxMachine machine, const ZxValue argument, ZxValue *result) {
     uint8_t *expr_text = NULL;
     size_t expr_len = 0;
     zx_get_string(argument, &expr_text, &expr_len);
-    printf("Internal expr: %.*s\n", (int)expr_len, expr_text);
 
     ZxValue eval_result;
     zx_init_value(&eval_result);
@@ -380,8 +393,7 @@ ZxError zx_function_call_no_arg(ZxMachine machine, const uint8_t function, ZxVal
         case ZX_FUN_RND:
             return zx_function_rnd(machine, result);
     }
-
-    return ERR_NOT_YET_IMPLEMENTED;
+    return ERR_UNKNOWN;
 }
 ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const ZxValue argument, ZxValue *result) {
     if (result == NULL || machine == NULL) {
@@ -442,11 +454,12 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
             return zx_function_tan(machine, argument, result);
         case ZX_FUN_USR:
             return zx_function_usr(argument, result);
+        case ZX_FUN_VAL:
+            return zx_function_val(machine, argument, result);
         case ZX_FUN_VAL_S:
-            return zx_function_val_s_string(machine, argument, result);
+            return zx_function_val_s(machine, argument, result);
     }
-
-    return ERR_NOT_YET_IMPLEMENTED;
+    return ERR_UNKNOWN;
 }
 ZxError zx_function_call_2_arg(ZxMachine machine, const uint8_t function, const ZxValue argument1, const ZxValue argument2, ZxValue *result) {
     if (result == NULL || machine == NULL) {
@@ -467,8 +480,7 @@ ZxError zx_function_call_2_arg(ZxMachine machine, const uint8_t function, const 
         case ZX_FUN_SCREEN_S:
             return zx_function_screen_s(machine, argument1, argument2, result);
     }
-
-    return ERR_NOT_YET_IMPLEMENTED;
+    return ERR_UNKNOWN;
 }
 
 static uint32_t generate_random_int(ZxMachine machine) {

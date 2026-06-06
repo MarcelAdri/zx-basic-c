@@ -694,7 +694,7 @@ bool is_num_function_no_arg(const uint8_t c) {
     return false;
 }
 bool is_num_function_str_arg(const uint8_t c) {
-    if (c == 176 ||  //VAL
+    if (c == ZX_FUN_VAL ||
         c == ZX_FUN_USR ||
         c == ZX_FUN_CODE ||
         c == ZX_FUN_LEN

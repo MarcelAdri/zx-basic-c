@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <locale.h>
+#include <string.h>
 
 #include "machine.h"
 #include "version.h"
@@ -38,22 +39,83 @@ EMSCRIPTEN_KEEPALIVE
 int UI_translate_keypress(char key, char mode) {
     return get_token_from_key(key, mode);
 }
+// EMSCRIPTEN_KEEPALIVE
+// const char* UI_get_keyword_for_token(int token) {
+//     return get_content_from_token(token);
+// }
+// EMSCRIPTEN_KEEPALIVE
+// const uint8_t* UI_get_text_screen(ZxMachine machine) {
+//     return machine_get_text_screen(machine);
+// }
 EMSCRIPTEN_KEEPALIVE
-const char* UI_get_keyword_for_token(int token) {
-    return get_content_from_token(token);
-}
-EMSCRIPTEN_KEEPALIVE
-const uint8_t* UI_get_text_screen(ZxMachine machine) {
-    // We geven simpelweg de pointer naar de 22x32 array terug!
-    return machine_get_text_screen(machine);
+const char* UI_get_text_screen_utf8(ZxMachine machine) {
+    static char screen_utf8_buffer[4096];
+
+    screen_utf8_buffer[0] = '\0';
+    char *ptr = screen_utf8_buffer;
+    size_t remaining = sizeof(screen_utf8_buffer);
+
+    for (int y = 0; y < 22; y++) {
+        for (int x = 0; x < 32; x++) {
+            uint8_t token = *machine_get_from_text_screen(machine, y, x);
+
+            const char *utf8_char = get_printable_content_from_token(token);
+            size_t len = strlen(utf8_char);
+
+            if (remaining > len + 1) {
+                strcpy(ptr, utf8_char);
+                ptr += len;
+                remaining -= len;
+            }
+        }
+        if (remaining > 2) {
+            *ptr++ = '\n';
+            remaining--;
+        }
+    }
+
+    *ptr = '\0';
+
+    return screen_utf8_buffer;
 }
 EMSCRIPTEN_KEEPALIVE
 int UI_get_machine_state(ZxMachine machine) {
     return machine_get_state(machine);
 }
+// EMSCRIPTEN_KEEPALIVE
+// const uint8_t* UI_get_system_screen(ZxMachine machine) {
+//     return machine_get_system_screen(machine);
+// }
 EMSCRIPTEN_KEEPALIVE
-const uint8_t* UI_get_system_screen(ZxMachine machine) {
-    return machine_get_system_screen(machine);
+const char* UI_get_system_screen_utf8(ZxMachine machine) {
+    static char screen_utf8_buffer[4096];
+
+    screen_utf8_buffer[0] = '\0';
+    char *ptr = screen_utf8_buffer;
+    size_t remaining = sizeof(screen_utf8_buffer);
+
+    for (int y = 0; y < 2; y++) {
+        for (int x = 0; x < 32; x++) {
+            uint8_t token = *machine_get_from_system_screen(machine, y, x);
+
+            const char *utf8_char = get_printable_content_from_token(token);
+            size_t len = strlen(utf8_char);
+
+            if (remaining > len + 1) {
+                strcpy(ptr, utf8_char);
+                ptr += len;
+                remaining -= len;
+            }
+        }
+        if (remaining > 2) {
+            *ptr++ = '\n';
+            remaining--;
+        }
+    }
+
+    *ptr = '\0';
+
+    return screen_utf8_buffer;
 }
 EMSCRIPTEN_KEEPALIVE
 const char* UI_format_zx_line(const uint8_t *buffer, const size_t length) {

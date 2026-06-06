@@ -71,10 +71,12 @@
 
 ZxError build_zx_sentence (const uint8_t *characters, size_t length, char *result);
 const char* get_content_from_token (uint8_t token);
+const char* get_printable_content_from_token (uint8_t token);
 int get_token_from_key (char key, char mode);
 ZxError string_to_zx_characters (const char *input, size_t input_length, uint8_t *output, size_t output_length, size_t *bytes_written);
 char get_expected_cursor_mode(const uint8_t *buffer, size_t length);
 bool is_zx_printable_character(uint8_t c);
+bool is_zx_graphics_character(uint8_t c);
 bool is_zx_alnum(uint8_t c);
 bool is_zx_alpha(uint8_t c);
 bool is_zx_space(uint8_t c);

@@ -177,7 +177,11 @@ ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, 
                 return zx_assign_string(lit, len, literal);
             }
             if (!is_zx_printable_character(expression[i])) {
-                lit[len] = get_token_from_key('?', KEYMAP_MODE_LITERAL);
+                if (is_zx_graphics_character(expression[i])) {  //TODO: graphic characters
+                    lit[len] = 96;  //ukp
+                } else {
+                    lit[len] = get_token_from_key('?', KEYMAP_MODE_LITERAL);
+                }
             } else {
                 lit[len] = expression[i];
             }

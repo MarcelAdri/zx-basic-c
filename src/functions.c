@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
+#include <ctype.h>
 #include "functions.h"
 #include "characters.h"
 #include "errors.h"
@@ -226,7 +227,7 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
     if (x_val < 0 || x_val > 31 || y_val < 0 || y_val > 21) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
-    const uint8_t *screen = machine_get_from_screen(machine, (uint8_t)y_val, (uint8_t)x_val);
+    const uint8_t *screen = machine_get_from_text_screen(machine, (uint8_t)y_val, (uint8_t)x_val);
     return zx_assign_string(screen, 1, result);
 }
 static ZxError zx_function_sgn(const ZxValue argument, ZxValue *result) {
@@ -303,6 +304,30 @@ static ZxError zx_function_tan(ZxMachine machine, const ZxValue argument, ZxValu
 
     return zx_assign_number(arg_sin_value / arg_cos_value, result);
 }
+static ZxError zx_function_usr(const ZxValue argument, ZxValue *result) {
+    if (argument.type == ZX_TYPE_STRING) {
+        uint8_t *arg_string = NULL;
+        size_t arg_string_len;
+        ZxError err = zx_get_string(argument, &arg_string, &arg_string_len);
+        if (err != ERR_0_OK) return err;
+
+        const char char_code = (char)tolower(arg_string[0] + 47);
+
+        if (char_code < (char)144 || char_code > (char)164) {
+            return ERR_A_INVALID_ARGUMENT;
+        }
+
+        uint16_t udg_address = 65368 + (char_code - ('a' + (char)47)) * 8;
+
+        return zx_assign_number((double)udg_address, result);
+
+    }
+    if (argument.type == ZX_TYPE_NUMBER) {
+        return ERR_NOT_YET_IMPLEMENTED;
+    }
+
+    return ERR_C_NONSENSE_IN_BASIC;
+}
 static ZxError zx_function_val_s_string(ZxMachine machine, const ZxValue argument, ZxValue *result) {
     uint8_t *expr_text = NULL;
     size_t expr_len = 0;
@@ -353,16 +378,18 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
     if (!is_argument_function(function)) {
         return ERR_UNKNOWN;
     }
-    if ((is_num_function_num_arg(function) ||
-        is_string_function_num_argument(function)) &&
-        argument.type != ZX_TYPE_NUMBER) {
-        return ERR_A_INVALID_ARGUMENT;
+    if (function != ZX_FUN_USR) {
+        if ((is_num_function_num_arg(function) ||
+            is_string_function_num_argument(function)) &&
+            argument.type != ZX_TYPE_NUMBER) {
+            return ERR_A_INVALID_ARGUMENT;
         }
-    if ((is_num_function_str_arg(function) ||
-        is_string_function_str_argument(function)) &&
-        argument.type != ZX_TYPE_STRING) {
-        return ERR_A_INVALID_ARGUMENT;
+        if ((is_num_function_str_arg(function) ||
+            is_string_function_str_argument(function)) &&
+            argument.type != ZX_TYPE_STRING) {
+            return ERR_A_INVALID_ARGUMENT;
         }
+    }
 
     switch (function) {
         case ZX_FUN_ABS:
@@ -400,7 +427,7 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
         case ZX_FUN_TAN:
             return zx_function_tan(machine, argument, result);
         case ZX_FUN_USR:
-            return ERR_NOT_YET_IMPLEMENTED;
+            return zx_function_usr(argument, result);
         case ZX_FUN_VAL_S:
             return zx_function_val_s_string(machine, argument, result);
     }

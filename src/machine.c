@@ -12,6 +12,7 @@
 #include "errors.h"
 #include "zx_types.h"
 #include "helpers.h"
+#include "characters.h"
 
 #define NOT_FOUND (-1)
 
@@ -277,9 +278,15 @@ const uint8_t* machine_get_text_screen(ZxMachine machine) {
     }
     return NULL;
 }
-const uint8_t* machine_get_from_screen(ZxMachine machine, const uint8_t y, const uint8_t x) {
+const uint8_t* machine_get_from_text_screen(ZxMachine machine, const uint8_t y, const uint8_t x) {
     if (machine != NULL) {
         return &machine->text_screen[y][x];
+    }
+    return NULL;
+}
+const uint8_t* machine_get_from_system_screen(ZxMachine machine, const uint8_t y, const uint8_t x) {
+    if (machine != NULL) {
+        return &machine->system_screen[y][x];
     }
     return NULL;
 }
@@ -294,47 +301,71 @@ void machine_next_line(ZxMachine machine) {
     }
 
 }
-static void machine_print_to_text(ZxMachine machine, const char *text) {
-    assert(text != NULL && "text mag nooit NULL zijn in deze interne functie");
-    if (machine == NULL || machine->print_callback == NULL) return;
-
-    size_t len = strlen(text);
-    if (len == 0) return;
+static void machine_print_to_text(ZxMachine machine, const uint8_t *tokens, size_t len) {
+    assert(tokens != NULL && "tokens mag nooit NULL zijn in deze interne functie");
+    if (machine == NULL || len == 0) return;
 
     for (size_t i = 0; i < len; i++) {
-        if (text[i] == '\n') {
+        uint8_t token = tokens[i];
+
+        if (token == '\n' || token == 13) {
             machine_next_line(machine);
             continue;
         }
-        machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = text[i];
+
+        if (token >= 165) {
+            const char *keyword_text = get_content_from_token(token);
+            size_t kw_len = strlen(keyword_text);
+
+            for (size_t j = 0; j < kw_len; j++) {
+                machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = (uint8_t)keyword_text[j];
+                if (machine->text_cursor_x >= 31) {
+                    machine_next_line(machine);
+                } else {
+                    machine->text_cursor_x++;
+                }
+            }
+            continue;
+        }
+
+        machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = token;
+
         if (machine->text_cursor_x >= 31) {
             machine_next_line(machine);
         } else {
             machine->text_cursor_x++;
         }
     }
+
 }
 void machine_print_value(ZxMachine machine, const ZxValue value) {
-    char c_string[2048] = {0};
+    if (machine == NULL) return;
 
     if (value.type == ZX_TYPE_STRING) {
-        // Directe conversie: ZX-tokens van de stringvariabele -> C-string
-        if (zx_to_string(value.data.string.text, value.data.string.length, c_string, sizeof(c_string)) == ERR_0_OK) {
-            machine_print_to_text(machine, c_string);
-        }
+        uint8_t *tokens = NULL;
+        size_t tokens_len = 0;
+
+        zx_get_string(value, &tokens, &tokens_len);
+
+        machine_print_to_text(machine, tokens, tokens_len);
     }
     else if (value.type == ZX_TYPE_NUMBER) {
-        uint8_t zx_tokens[32];
-        size_t bytes_written = 0;
+        double number;
+        zx_get_number(value, &number);
 
-        // Stap 1: Van double naar ZX-tokens
-        if (formatted_number(value.data.number, zx_tokens, sizeof(zx_tokens), &bytes_written) == ERR_0_OK) {
-            // Stap 2: Van ZX-tokens naar C-string
-            if (zx_to_string(zx_tokens, bytes_written, c_string, sizeof(c_string)) == ERR_0_OK) {
-                machine_print_to_text(machine, c_string);
-            }
+        uint8_t num_buffer[32];
+        size_t tokens_len = 0;
+
+        if (formatted_number(number, num_buffer, sizeof(num_buffer), &tokens_len) == ERR_0_OK) {
+            machine_print_to_text(machine, num_buffer, tokens_len);
         }
     }
+    else {
+        uint8_t fallback_token = 32;
+
+        machine_print_to_text(machine, &fallback_token, 1);
+    }
+
 }
 const uint8_t* machine_get_system_screen(ZxMachine machine) {
     if (machine != NULL) {

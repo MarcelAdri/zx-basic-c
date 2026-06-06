@@ -106,6 +106,42 @@ static const char *const ZX_CHARACTERS[256] = {
     [126] = "~",
     [127] = "©",
     [128] = "↑",
+    [129] = "■",
+    [130] = "■",
+    [131] = "■",
+    [132] = "■",
+    [133] = "■",
+    [134] = "■",
+    [135] = "■",
+    [136] = "■",
+    [137] = "■",
+    [138] = "■",
+    [139] = "■",
+    [140] = "■",
+    [141] = "■",
+    [142] = "■",
+    [143] = "■",
+    [144] = "■",
+    [145] = "■",
+    [146] = "■",
+    [147] = "■",
+    [148] = "■",
+    [149] = "■",
+    [150] = "■",
+    [151] = "■",
+    [152] = "■",
+    [153] = "■",
+    [154] = "■",
+    [155] = "■",
+    [156] = "■",
+    [157] = "■",
+    [158] = "■",
+    [159] = "■",
+    [160] = "■",
+    [161] = "■",
+    [162] = "■",
+    [163] = "■",
+    [164] = "■",
     [165] = "RND ",
     [166] = "IN KEY$ ",
     [167] = "PI ",
@@ -464,12 +500,16 @@ ZxError string_to_zx_characters (const char *input, const size_t input_length, u
     return ERR_0_OK;
 }
 const char* get_content_from_token (const uint8_t token) {
-    const char* key = NULL;
-
     if (ZX_CHARACTERS[token] != NULL) {
         return ZX_CHARACTERS[token];
     }
-    return "";
+    return "?";
+}
+const char* get_printable_content_from_token (const uint8_t token) {
+    if (token != 13 && token < 165 && ZX_CHARACTERS[token] != NULL) {
+        return ZX_CHARACTERS[token];
+    }
+    return "?";
 }
 
 ZxError build_zx_sentence (const uint8_t *characters, const size_t length, char *result) {
@@ -538,6 +578,12 @@ char get_expected_cursor_mode(const uint8_t *buffer, const size_t length) {
 
 bool is_zx_printable_character(const uint8_t c) {
     if (c >= 32 && c <= 128) {
+        return true;
+    }
+    return false;
+}
+bool is_zx_graphics_character(const uint8_t c) {
+    if (c >= 129 && c <= 164) {
         return true;
     }
     return false;
@@ -634,6 +680,7 @@ bool is_num_function_num_arg(const uint8_t c) {
         c == ZX_FUN_PEEK ||
         c == ZX_FUN_SQR ||
         c == ZX_FUN_SGN ||
+        c == ZX_FUN_USR ||
         c == ZX_FUN_ABS) {
         return true;
     }

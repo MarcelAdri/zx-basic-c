@@ -17,7 +17,7 @@
         }
         #system-area {
             background: #111; color: #0ff; border: 4px solid #555; border-top: 2px dashed #444;
-            padding: 10px; height: 40px; display: flex; flex-direction: column;
+            padding: 10px; min-height: 50px; display: flex; flex-direction: column;
             font-family: monospace; line-height: 1.2; font-size: 16px; white-space: pre;
         }
         #input-line {
@@ -304,31 +304,15 @@
         if (!spectrumMachinePointer) return;
 
         // --- 1. HOOFDSCHERM (22 regels x 32 karakters = 704 bytes) ---
-        const textPtr = Module.ccall('UI_get_text_screen', 'number', ['number'], [spectrumMachinePointer]);
-        if (textPtr) {
-            let textOutput = "";
-            for (let i = 0; i < 704; i++) {
-                // Lees 1 byte uit het C-geheugen
-                let charCode = Module.HEAPU8[textPtr + i];
-                textOutput += String.fromCharCode(charCode);
+        const textOutput = Module.ccall('UI_get_text_screen_utf8', 'string', ['number'], [spectrumMachinePointer]);
 
-                // Elke 32 tekens forceren we een enter voor de HTML opmaak
-                if ((i + 1) % 32 === 0) {
-                    textOutput += "\n";
-                }
-            }
+        if (textOutput) {
             document.getElementById("console-output").textContent = textOutput;
         }
 
         // --- 2. SYSTEEMSCHERM (2 regels x 32 karakters = 64 bytes) ---
-        const sysPtr = Module.ccall('UI_get_system_screen', 'number', ['number'], [spectrumMachinePointer]);
-        if (sysPtr) {
-            let sysOutput = "";
-            // We lezen hier alleen de eerste 32 bytes (regel 1), want regel 2 is voor je eigen typ-invoer
-            for (let i = 0; i < 32; i++) {
-                let charCode = Module.HEAPU8[sysPtr + i];
-                sysOutput += String.fromCharCode(charCode);
-            }
+        const sysOutput = Module.ccall('UI_get_system_screen_utf8', 'string', ['number'], [spectrumMachinePointer]);
+        if (sysOutput) {
             document.getElementById("system-message").textContent = sysOutput;
         }
     }

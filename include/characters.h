@@ -72,6 +72,7 @@
 #define ZX_STATEMENT_CLS 251
 #define ZX_STATEMENT_LET 241
 #define ZX_STATEMENT_PRINT 245
+#define ZX_STATEMENT_LIST 240
 
 
 ZxError build_zx_sentence (const uint8_t *characters, size_t length, char *result);

@@ -18,11 +18,6 @@
 
 #define ZX_MAX_BASIC_RAM 41500
 
-typedef struct {
-    uint8_t *tokens;
-    size_t length;
-    bool exists;
-} ZxLine;
 
 typedef struct {
     char name[MAX_VAR_NAME_LEN];       // We reserveren max. 99 tekens voor de naam (+ '\0')
@@ -47,6 +42,7 @@ typedef struct Machine {
     uint8_t text_cursor_y;
 
     ZxLine program_memory[10000];
+    uint16_t current_edit_line;
     size_t used_basic_ram;
 
     uint16_t current_line;
@@ -165,6 +161,20 @@ uint16_t machine_get_current_line(ZxMachine machine) {
 
 uint8_t machine_get_current_statement(ZxMachine machine) {
     return machine ? machine->current_statement : 1;
+}
+void machine_set_current_edit_line(ZxMachine machine, uint16_t line_number) {
+    if (machine != NULL) {
+        machine->current_edit_line = line_number;
+    }
+}
+ZxLine* machine_get_program(ZxMachine machine) {
+    if (machine == NULL) {
+        return NULL;
+    }
+    return machine->program_memory;
+}
+uint16_t machine_get_current_edit_line(ZxMachine machine) {
+    return machine != NULL ? machine->current_edit_line : 0;
 }
 ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value) {
     if (machine == NULL || var_name == NULL) {

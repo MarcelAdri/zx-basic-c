@@ -80,6 +80,25 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     zx_free_string(&result);
     return err;
 }
+static ZxError execute_cmd_list(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    uint16_t start_line = 0;
+    ZxError err;
+
+    if (output_size > 1) {
+        ZxValue line_number;
+        zx_init_value(&line_number);
+        size_t dummy_bytes_read;
+        double start_line_value;
+        err = solve_expression(machine, cmd + 1, output_size - 1, &line_number, &dummy_bytes_read);
+        if (err != ERR_0_OK) return err;
+        err = zx_get_number(line_number, &start_line_value);
+        zx_free_string(&line_number);
+        if (err != ERR_0_OK) return err;
+        if (start_line_value < 0 || start_line_value > 9999) return ERR_B_INTEGER_OUT_OF_RANGE;
+        start_line = (uint16_t)start_line_value;
+    }
+    return list_program(&machine, start_line, false);
+}
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
         machine_next_line(machine);
@@ -171,10 +190,16 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                 machine_set_location(machine, 0, statement_counter);
                 switch (command[0]) {
                     case ZX_STATEMENT_CLS:
+                        if (output_size != 1) {
+                            return ERR_C_NONSENSE_IN_BASIC;
+                        }
                         err = execute_cmd_cls(machine);
                         break;
                     case ZX_STATEMENT_LET:
                         err = execute_cmd_let(machine, command, output_size);
+                        break;
+                    case ZX_STATEMENT_LIST:
+                        err = execute_cmd_list(machine, command, output_size);
                         break;
                     case ZX_STATEMENT_PRINT:
                         err = execute_cmd_print(machine, command, output_size);

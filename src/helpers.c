@@ -19,7 +19,94 @@
 #include "characters.h"
 #include "errors.h"
 #include "machine.h"
+#include "execute.h"
 
+ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic) {
+    if (machine == NULL) return ERR_UNKNOWN;
+
+    ZxLine* program = machine_get_program(*machine);
+    if (program == NULL) return ERR_UNKNOWN;
+
+    uint16_t start = start_line;
+    const uint16_t edit_line = machine_get_current_edit_line(*machine);
+
+    if (is_automatic) {
+        // 1. More than 22 lines?
+        size_t line_counter = 0;
+        for (uint16_t i = 0; i < 10000; i++) {
+            if (program[i].exists) line_counter++;
+        }
+
+        if (line_counter <= 22) {
+            start = 0;
+        } else {
+            // 2. Drape around edit_line
+            line_counter = 0;
+            start = edit_line;
+            uint16_t current = edit_line;
+
+            while (current > 0 && line_counter < 10) {
+                if (program[current].exists) {
+                    line_counter++;
+                    start = current;
+                }
+                current--;
+            }
+        }
+    }
+
+    // Execute CLS
+    uint8_t cmd = ZX_STATEMENT_CLS;
+    size_t size = 1;
+    ZxError err = execute(*machine, &cmd, size);
+    if (err != ERR_0_OK) return err;
+
+    uint16_t current_line = start;
+
+    while (current_line < 10000) {
+
+        if (program[current_line].exists) {
+
+            //Line-number
+            char line_num_str[8];
+            if (current_line == edit_line) {
+                snprintf(line_num_str, sizeof(line_num_str), "%u>", current_line);
+            } else {
+                snprintf(line_num_str, sizeof(line_num_str), "%u ", current_line);
+            }
+
+            ZxValue zx_line_num;
+            zx_init_value(&zx_line_num);
+            zx_assign_string((uint8_t*)line_num_str, strlen(line_num_str), &zx_line_num);
+            machine_print_value(*machine, zx_line_num);
+            zx_free_string(&zx_line_num);
+
+            //Actual line
+            ZxValue zx_tokens;
+            zx_init_value(&zx_tokens);
+            zx_assign_string(program[current_line].tokens, program[current_line].length, &zx_tokens);
+            machine_print_value(*machine, zx_tokens);
+            zx_free_string(&zx_tokens);
+
+            // Check of het scherm vol is
+            if (machine_get_text_cursor_y(*machine) >= 21) {
+                if (is_automatic) {
+                    return ERR_0_OK;
+                } else {
+                    // TODO: Hier komt later het estafette-stokje voor de "scroll?" state!
+                    // Voor nu stoppen we gewoon veilig om crashes te voorkomen.
+                    return ERR_0_OK;
+                }
+            }
+
+
+            machine_next_line(*machine);
+        }
+        current_line++;
+    }
+
+    return ERR_0_OK;
+}
 ZxError formatted_number(const double number, uint8_t *out_string, const size_t out_string_size, size_t *bytes_written) {
     if (out_string == NULL || out_string_size == 0 || bytes_written == NULL) {
         return ERR_UNKNOWN;

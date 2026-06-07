@@ -6,7 +6,9 @@
 #define ZX_BASIC_C_HELPERS_H
 #include "errors.h"
 #include "zx_types.h"
+#include "machine.h"
 
+ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic);
 ZxError make_double(const char *text, double *out_float);
 ZxError formatted_number(double number, uint8_t *out_string, size_t out_string_size, size_t *bytes_written);
 ZxError parse_number_to_double(const uint8_t *expression, size_t expression_size, ZxValue *out_number, size_t *bytes_read);

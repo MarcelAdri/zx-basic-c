@@ -8,6 +8,7 @@
 #include "version.h"
 #include "execute.h"
 #include "characters.h"
+#include "helpers.h"
 
 // Dit zorgt ervoor dat Emscripten-functies beschikbaar zijn als we voor het web compileren
 #ifdef __EMSCRIPTEN__
@@ -197,16 +198,15 @@ void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
             //todo: wis regel
             machine_print_to_system(machine, "0 OK, 0:1");
         } else {
+            while (i < size && is_zx_space(buffer[i])) {
+                i++;
+            }
             ZxError err = machine_insert_line(machine, line, buffer + i, size - i);
             if (err != ERR_0_OK) {
                 machine_print_error(machine, err);
             } else {
-                ZxValue zx_line;
-                zx_init_value(&zx_line);
-                zx_assign_string(buffer, size, &zx_line);
-                machine_print_value(machine, zx_line);
-                machine_next_line(machine);
-                zx_free_string(&zx_line);
+                machine_set_current_edit_line(machine, line);
+                list_program(&machine, 0, true);
 
                 machine_print_error(machine, ERR_0_OK);
             }

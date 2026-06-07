@@ -22,6 +22,8 @@ ZxError machine_get_string(ZxMachine machine, uint8_t var_name, ZxValue *value);
 uint8_t machine_get_text_cursor_x(ZxMachine machine);
 uint8_t machine_get_text_cursor_y(ZxMachine machine);
 void machine_set_text_cursor_x(ZxMachine machine, uint8_t x);
+void machine_set_text_cursor_y(ZxMachine machine, uint8_t y);
+void machine_clear_text_screen(ZxMachine machine);
 const uint8_t* machine_get_text_screen(ZxMachine machine);
 const uint8_t* machine_get_from_text_screen(ZxMachine machine, uint8_t y, uint8_t x);
 const uint8_t* machine_get_from_system_screen(ZxMachine machine, uint8_t y, uint8_t x);

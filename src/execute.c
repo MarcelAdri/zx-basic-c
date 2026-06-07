@@ -14,6 +14,10 @@
 #include "characters.h"
 #include "helpers.h"
 
+static ZxError execute_cmd_cls(ZxMachine machine) {
+    machine_clear_text_screen(machine);
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     bool in_variable_name = true;
     bool in_expression = false;
@@ -76,7 +80,6 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     zx_free_string(&result);
     return err;
 }
-
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
         machine_next_line(machine);
@@ -167,11 +170,14 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             if (output_size > 0) {
                 machine_set_location(machine, 0, statement_counter);
                 switch (command[0]) {
-                    case 245: //PRINT
-                        err = execute_cmd_print(machine, command, output_size);
+                    case ZX_STATEMENT_CLS:
+                        err = execute_cmd_cls(machine);
                         break;
-                    case 241: //LET
+                    case ZX_STATEMENT_LET:
                         err = execute_cmd_let(machine, command, output_size);
+                        break;
+                    case ZX_STATEMENT_PRINT:
+                        err = execute_cmd_print(machine, command, output_size);
                         break;
                     default:
                         return ERR_NOT_YET_IMPLEMENTED;

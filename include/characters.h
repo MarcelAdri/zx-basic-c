@@ -68,6 +68,11 @@
 #define ZX_FUN_VAL      176
 #define ZX_FUN_VAL_S    174
 
+//Spectrum statements
+#define ZX_STATEMENT_CLS 251
+#define ZX_STATEMENT_LET 241
+#define ZX_STATEMENT_PRINT 245
+
 
 ZxError build_zx_sentence (const uint8_t *characters, size_t length, char *result);
 const char* get_content_from_token (uint8_t token);

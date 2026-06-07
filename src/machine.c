@@ -304,9 +304,21 @@ void machine_set_text_cursor_x(ZxMachine machine, const uint8_t x) {
         machine->text_cursor_x = x;
     }
 }
+void machine_set_text_cursor_y(ZxMachine machine, const uint8_t y) {
+    if (machine != NULL) {
+        machine->text_cursor_y = y;
+    }
+}
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback) {
     if (machine != NULL) {
         machine->print_callback = callback;
+    }
+}
+void machine_clear_text_screen(ZxMachine machine) {
+    if (machine != NULL) {
+        memset(&machine->text_screen[0][0], ' ', 22 * 32);
+        machine->text_cursor_x = 0;
+        machine->text_cursor_y = 0;
     }
 }
 const uint8_t* machine_get_text_screen(ZxMachine machine) {

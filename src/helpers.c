@@ -413,3 +413,34 @@ uint8_t* machine_serialize_program(ZxMachine machine, size_t* out_size) {
     *out_size = total_size;
     return buffer;
 }
+ZxError machine_deserialize_program(ZxMachine machine, const uint8_t* buffer, size_t size) {
+    if (machine == NULL || buffer == NULL || size == 0) {
+        return ERR_UNKNOWN;
+    }
+
+    machine_reset(machine);
+
+    size_t offset = 0;
+
+    while (offset + 4 <= size) {
+
+        uint16_t line_num = buffer[offset] | (buffer[offset + 1] << 8);
+        offset += 2;
+
+        uint16_t token_length = buffer[offset] | (buffer[offset + 1] << 8);
+        offset += 2;
+
+        if (offset + token_length > size) {
+            return ERR_R_TAPE_LOADING;
+        }
+
+        ZxError err = machine_insert_line(machine, line_num, &buffer[offset], token_length);
+        if (err != ERR_0_OK) {
+            return err;
+        }
+
+        offset += token_length;
+    }
+
+    return ERR_0_OK;
+}

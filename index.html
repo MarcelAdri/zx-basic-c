@@ -60,6 +60,7 @@
     </style>
 </head>
 <body>
+<input type="file" id="tapeLoader" style="display: none;" accept=".zx,.bin" />
 
 <div id="emulator-container">
     <h1 style="color: #ccc; margin-bottom: 5px;">ZX Spectrum Emulator</h1>
@@ -367,6 +368,105 @@
         inputBytes = [];
         setMode('K');
         updateDisplay();
+    }
+    function triggerLoadTape(targetMachinePointer) {
+        const fileInput = document.getElementById('tapeLoader');
+
+        // We overschrijven de onchange callback LIVE op het moment van klikken
+        fileInput.onchange = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const size = uint8Array.length;
+
+                const bufferPtr = Module._malloc(size);
+                Module.HEAPU8.set(uint8Array, bufferPtr);
+
+                // De targetMachinePointer is hier direct beschikbaar dankzij de closure!
+                const err = Module.ccall(
+                    'UI_deserialize_program',
+                    'number',
+                    ['number', 'number', 'number'],
+                    [targetMachinePointer, bufferPtr, size]
+                );
+
+                Module._free(bufferPtr);
+
+                if (err !== 0) {
+                    console.error("Fout bij laden van tape. Error code:", err);
+                } else {
+                    console.log("Tape succesvol geladen!");
+                    renderScreens();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        };
+
+        // Activeer de picker
+        fileInput.click();
+    }
+
+    // --- SAVE ---
+    function triggerSaveTape(targetMachinePointer, filename) {
+        try {
+            // 1. Schoon de bestandsnaam op en forceer de .zx extensie
+            if (!filename || filename.trim() === "") {
+                filename = "program";
+            }
+            if (!filename.toLowerCase().endsWith(".zx")) {
+                filename += ".zx";
+            }
+
+            // 2. Vraag aan C om de inpak-functie te draaien
+            const sizePtr = Module._malloc(4);
+            const bufferPtr = Module.ccall(
+                'UI_serialize_program', 'number',
+                ['number', 'number'], [targetMachinePointer, sizePtr]
+            );
+
+            // BEVEILIGING: Als er geen programma is (of out-of-memory)
+            if (bufferPtr === 0) {
+                alert("Emulator waarschuwing: Geen programma in het geheugen om op te slaan!");
+                Module._free(sizePtr);
+                return;
+            }
+
+            // 3. Lees de data (FIX: Gebruik uitsluitend HEAPU8 om undefined-crashes te voorkomen)
+            const size = Module.HEAPU8[sizePtr] |
+                (Module.HEAPU8[sizePtr + 1] << 8) |
+                (Module.HEAPU8[sizePtr + 2] << 16) |
+                (Module.HEAPU8[sizePtr + 3] << 24);
+
+            const wasmView = new Uint8Array(Module.HEAPU8.buffer, bufferPtr, size);
+            const dataCopy = new Uint8Array(wasmView);
+
+            // 4. Geheugen vrijgeven
+            Module._free(bufferPtr);
+            Module._free(sizePtr);
+
+            // 5. Download activeren
+            const blob = new Blob([dataCopy], { type: "application/octet-stream" });
+            const url = URL.createObjectURL(blob);
+
+            const downloadLink = document.createElement("a");
+            downloadLink.href = url;
+            downloadLink.download = filename;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(url);
+
+        } catch (err) {
+            // Als WebAssembly nu nog struikelt, vangen we het af en loopt de emulator door!
+            console.error("FATALE JS FOUT TIJDENS SAVE:", err);
+            alert("Er is een interne fout opgetreden bij het opslaan:\n" + err.message);
+        }
     }
 
 

@@ -13,6 +13,7 @@
 #include "expressions.h"
 #include "characters.h"
 #include "helpers.h"
+#include "main.h"
 
 static ZxError execute_cmd_cls(ZxMachine machine) {
     machine_clear_text_screen(machine);
@@ -99,6 +100,32 @@ static ZxError execute_cmd_list(ZxMachine machine, const uint8_t *cmd, size_t ou
     }
     return list_program(&machine, start_line, false);
 }
+static ZxError execute_cmd_load(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    ZxValue arg;
+    zx_init_value(&arg);
+    size_t dummy_bytes_read;
+    ZxError err = solve_expression(machine, cmd + 1, output_size - 1, &arg, &dummy_bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&arg);
+        return err;
+    }
+    if (arg.type != ZX_TYPE_STRING) {
+        zx_free_string(&arg);
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    uint8_t *arg_text = NULL;
+    size_t arg_text_len = 0;
+    zx_get_string(arg, &arg_text, &arg_text_len);
+    zx_free_string(&arg);
+    if (arg_text_len > 10) {
+        return ERR_F_INVALID_FILENAME;
+    }
+    UI_trigger_load(machine);
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_new(ZxMachine machine) {
     machine_reset(machine);
     return ERR_0_OK;
@@ -167,6 +194,43 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
 
     return ERR_0_OK;
 }
+static ZxError execute_cmd_save(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    ZxValue arg;
+    zx_init_value(&arg);
+    size_t dummy_bytes_read;
+    ZxError err = solve_expression(machine, cmd + 1, output_size - 1, &arg, &dummy_bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&arg);
+        return err;
+    }
+    if (arg.type != ZX_TYPE_STRING) {
+        zx_free_string(&arg);
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    uint8_t *arg_text = NULL;
+    size_t arg_text_len = 0;
+    zx_get_string(arg, &arg_text, &arg_text_len);
+    if (arg_text_len < 1 || arg_text_len > 10) {
+        zx_free_string(&arg);
+        return ERR_F_INVALID_FILENAME;
+    }
+    char filename[11] = {0};
+    size_t j = 0;
+    for (size_t i = 0; i < arg_text_len; i++) {
+        if (!is_zx_alnum(arg_text[i])) {
+            filename[j++] = '_';
+        } else {
+            filename[j++] = (char)arg_text[i];
+        }
+    }
+    filename[j] = '\0';
+    zx_free_string(&arg);
+    UI_trigger_save(machine, filename);
+    return ERR_0_OK;
+}
 
 ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size) {
     if (machine == NULL || input == NULL || input_size == 0) {
@@ -205,11 +269,17 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                     case ZX_STATEMENT_LIST:
                         err = execute_cmd_list(machine, command, output_size);
                         break;
+                    case ZX_STATEMENT_LOAD:
+                        err = execute_cmd_load(machine, command, output_size);
+                        break;
                     case ZX_STATEMENT_NEW:
                         err = execute_cmd_new(machine);
                         break;
                     case ZX_STATEMENT_PRINT:
                         err = execute_cmd_print(machine, command, output_size);
+                        break;
+                    case ZX_STATEMENT_SAVE:
+                        err = execute_cmd_save(machine, command, output_size);
                         break;
                     default:
                         return ERR_NOT_YET_IMPLEMENTED;

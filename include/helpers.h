@@ -16,5 +16,7 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
 int name_to_index(uint8_t name);
 ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, ZxValue *literal, size_t *bytes_read);
 ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expression_size, ZxValue *literal);
+ZxError machine_deserialize_program(ZxMachine machine, const uint8_t* buffer, size_t size);
+uint8_t* machine_serialize_program(ZxMachine machine, size_t* out_size);
 
 #endif //ZX_BASIC_C_HELPERS_H

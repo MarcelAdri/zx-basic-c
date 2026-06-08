@@ -9,6 +9,7 @@
 #include "execute.h"
 #include "characters.h"
 #include "helpers.h"
+#include "main.h"
 
 // Dit zorgt ervoor dat Emscripten-functies beschikbaar zijn als we voor het web compileren
 #ifdef __EMSCRIPTEN__
@@ -16,9 +17,13 @@
 #else
     #define EMSCRIPTEN_KEEPALIVE
 
-    // Fopspeen voor Clangd: vervang EM_ASM lokaal door absoluut niets
+    // Fopspeen voor Clangd: vervang macro's lokaal door lege declaraties
     #define EM_ASM(...)
     #define EM_ASM_(...)
+
+    // De magische fopspeen voor EM_JS:
+    // Vertaalt EM_JS(void, naam, (), { JS }) naar -> void naam() {}
+    #define EM_JS(ret, name, params, ...) ret name params { }
 #endif
 
 static void machine_print_error(ZxMachine machine, ZxError err) {
@@ -256,6 +261,30 @@ EMSCRIPTEN_KEEPALIVE
 const char* UI_get_version(void) {
     return ZX_BASIC_VERSION;
 }
+EMSCRIPTEN_KEEPALIVE
+uint8_t* UI_serialize_program(ZxMachine machine, size_t* out_size) {
+    // Roep de originele functie uit helper.c aan
+    return machine_serialize_program(machine, out_size);
+}
+
+EMSCRIPTEN_KEEPALIVE
+ZxError UI_deserialize_program(ZxMachine machine, const uint8_t* buffer, size_t size) {
+    // Roep de originele functie uit helper.c aan
+    return machine_deserialize_program(machine, buffer, size);
+}
+
+// 1. C roept deze functie aan als hij het LOAD commando leest
+EM_JS(void, UI_trigger_load, (ZxMachine machine), {
+    // Dit is pure JavaScript!
+    triggerLoadTape(machine);
+});
+
+// 2. C roept deze functie aan als hij SAVE "naam" leest
+EM_JS(void, UI_trigger_save, (ZxMachine machine, const char* filename_ptr), {
+    // We moeten de C-pointer naar de string eerst omzetten naar een JavaScript string
+    const jsFilename = UTF8ToString(filename_ptr);
+    triggerSaveTape(machine, jsFilename);
+});
 
 int main(void) {
     setlocale(LC_NUMERIC, "C");

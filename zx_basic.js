@@ -1327,6 +1327,7 @@ async function createWasm() {
       return ret;
     };
 
+
 // End JS library code
 
 // include: postlibrary.js
@@ -1378,6 +1379,7 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
 
 // Begin runtime exports
   Module['ccall'] = ccall;
+  Module['UTF8ToString'] = UTF8ToString;
   var missingLibrarySymbols = [
   'writeI53ToI64',
   'writeI53ToI64Clamped',
@@ -1609,7 +1611,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'PATH_FS',
   'UTF8Decoder',
   'UTF8ArrayToString',
-  'UTF8ToString',
   'stringToUTF8Array',
   'stringToUTF8',
   'lengthBytesUTF8',
@@ -1792,6 +1793,8 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('onFree');
   ignoredModuleProp('onSbrkGrow');
 }
+function UI_trigger_load(machine) { triggerLoadTape(machine); }
+function UI_trigger_save(machine,filename_ptr) { const jsFilename = UTF8ToString(filename_ptr); triggerSaveTape(machine, jsFilename); }
 
 // Imports from the Wasm binary.
 var _malloc = Module['_malloc'] = makeInvalidEarlyAccess('_malloc');
@@ -1807,6 +1810,8 @@ var _UI_format_zx_line = Module['_UI_format_zx_line'] = makeInvalidEarlyAccess('
 var _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = makeInvalidEarlyAccess('_UI_get_cursor_mode');
 var _run_basic_line = Module['_run_basic_line'] = makeInvalidEarlyAccess('_run_basic_line');
 var _UI_get_version = Module['_UI_get_version'] = makeInvalidEarlyAccess('_UI_get_version');
+var _UI_serialize_program = Module['_UI_serialize_program'] = makeInvalidEarlyAccess('_UI_serialize_program');
+var _UI_deserialize_program = Module['_UI_deserialize_program'] = makeInvalidEarlyAccess('_UI_deserialize_program');
 var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
 var _fflush = makeInvalidEarlyAccess('_fflush');
 var _emscripten_stack_get_end = makeInvalidEarlyAccess('_emscripten_stack_get_end');
@@ -1835,6 +1840,8 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['UI_get_cursor_mode'] != 'undefined', 'missing Wasm export: UI_get_cursor_mode');
   assert(typeof wasmExports['run_basic_line'] != 'undefined', 'missing Wasm export: run_basic_line');
   assert(typeof wasmExports['UI_get_version'] != 'undefined', 'missing Wasm export: UI_get_version');
+  assert(typeof wasmExports['UI_serialize_program'] != 'undefined', 'missing Wasm export: UI_serialize_program');
+  assert(typeof wasmExports['UI_deserialize_program'] != 'undefined', 'missing Wasm export: UI_deserialize_program');
   assert(typeof wasmExports['main'] != 'undefined', 'missing Wasm export: main');
   assert(typeof wasmExports['fflush'] != 'undefined', 'missing Wasm export: fflush');
   assert(typeof wasmExports['emscripten_stack_get_end'] != 'undefined', 'missing Wasm export: emscripten_stack_get_end');
@@ -1860,6 +1867,8 @@ function assignWasmExports(wasmExports) {
   _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = createExportWrapper('UI_get_cursor_mode', 2);
   _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 3);
   _UI_get_version = Module['_UI_get_version'] = createExportWrapper('UI_get_version', 0);
+  _UI_serialize_program = Module['_UI_serialize_program'] = createExportWrapper('UI_serialize_program', 2);
+  _UI_deserialize_program = Module['_UI_deserialize_program'] = createExportWrapper('UI_deserialize_program', 3);
   _main = Module['_main'] = createExportWrapper('main', 2);
   _fflush = createExportWrapper('fflush', 1);
   _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'];
@@ -1875,6 +1884,10 @@ function assignWasmExports(wasmExports) {
 }
 
 var wasmImports = {
+  /** @export */
+  UI_trigger_load,
+  /** @export */
+  UI_trigger_save,
   /** @export */
   __assert_fail: ___assert_fail,
   /** @export */

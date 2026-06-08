@@ -606,6 +606,15 @@ bool is_zx_space(const uint8_t c) {
     }
     return false;
 }
+bool is_no(const uint8_t c) {
+    if (c == 78 ||  // N
+        c == 110 || // n
+        c == 32 ||  // <space>
+        c == 226) { // STOP
+        return true;
+        }
+    return false;
+}
 bool is_zx_plus_character(const uint8_t c) {
     if (c == ZX_OP_PLUS) {
         return true;

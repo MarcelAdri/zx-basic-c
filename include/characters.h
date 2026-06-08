@@ -71,8 +71,10 @@
 //Spectrum statements
 #define ZX_STATEMENT_CLS 251
 #define ZX_STATEMENT_LET 241
-#define ZX_STATEMENT_PRINT 245
 #define ZX_STATEMENT_LIST 240
+#define ZX_STATEMENT_NEW 230
+#define ZX_STATEMENT_PRINT 245
+#define ZX_STATEMENT_STOP 226
 
 
 ZxError build_zx_sentence (const uint8_t *characters, size_t length, char *result);
@@ -86,6 +88,7 @@ bool is_zx_graphics_character(uint8_t c);
 bool is_zx_alnum(uint8_t c);
 bool is_zx_alpha(uint8_t c);
 bool is_zx_space(uint8_t c);
+bool is_no(uint8_t c);
 bool is_zx_number_character(uint8_t c);
 bool is_zx_digit_character(uint8_t c);
 bool is_zx_relational_character(uint8_t c);

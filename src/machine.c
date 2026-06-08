@@ -24,16 +24,12 @@ typedef struct {
     ZxValue value;
 } NumericVariable;
 
-typedef enum {
-    ZX_STATE_IDLE,          // Wacht op een commando onderin beeld
-    ZX_STATE_RUNNING,       // Bezig met het uitvoeren van BASIC (of een commando)
-    ZX_STATE_WAIT_SCROLL,   // Scherm is vol, wacht op Y/N/SPACE
-    ZX_STATE_WAIT_INPUT,    // BASIC programma staat stil door een INPUT commando
-    ZX_STATE_WAIT_PAUSE     // BASIC programma staat stil door PAUSE commando
-} ZxState;
+
 
 typedef struct Machine {
     ZxState state;
+    ZxScrollReason scroll_reason;
+    uint16_t scroll_reason_resume_line;
 
     uint8_t text_screen[22][32];
     uint8_t system_screen[2][32];
@@ -52,7 +48,7 @@ typedef struct Machine {
 
     NumericVariable *numeric_vars;
     int numeric_variable_count;
-    int numeric_variable_capacity;
+    size_t numeric_variable_capacity;
 
     ZxPrintCallback print_callback;
 
@@ -87,7 +83,6 @@ static int get_numeric_variable_index(ZxMachine machine, const char *var_name, c
     }
     return NOT_FOUND;
 }
-
 ZxMachine machine_create(void) {
     Machine* machine = malloc(sizeof(Machine));
     memset(machine, 0, sizeof(Machine));
@@ -96,31 +91,42 @@ ZxMachine machine_create(void) {
         return NULL;
     }
 
-    for (int i = 0; i < 26; i++) {
-        zx_init_value(&machine->string_variables[i]);
-    }
-
-    machine->text_cursor_x = 0;
-    machine->text_cursor_y = 0;
-
-    memset(&machine->text_screen[0][0], ' ', 22 * 32);
-    memset(&machine->system_screen[0][0], ' ', 2 * 32);
-
-    machine->numeric_variable_capacity = 4;
-    machine->numeric_vars = malloc(machine->numeric_variable_capacity * sizeof(NumericVariable));
-    if (machine->numeric_vars == NULL) {
-        free(machine); // Opruimen als dit faalt!
-        return NULL;
-    }
-    machine->rng_state = 12345;
+    machine_reset(machine);
 
     return machine;
 }
-int machine_get_state(ZxMachine machine) {
+ZxState machine_get_state(ZxMachine machine) {
     if (machine != NULL) {
         return (int)machine->state;
     }
-    return 0; // ZX_STATE_IDLE
+    return ZX_STATE_IDLE;
+}
+void machine_set_state(ZxMachine machine, const ZxState state) {
+    if (machine != NULL) {
+        machine->state = state;
+    }
+}
+ZxScrollReason machine_get_scroll_reason(ZxMachine machine) {
+    if (machine != NULL) {
+        return machine->scroll_reason;
+    }
+    return ZX_SCROLL_REASON_NONE;
+}
+void machine_set_scroll_reason(ZxMachine machine, const ZxScrollReason reason) {
+    if (machine != NULL) {
+        machine->scroll_reason = reason;
+    }
+}
+uint16_t machine_get_scroll_resume_line(ZxMachine machine) {
+    if (machine != NULL) {
+        return machine->scroll_reason_resume_line;
+    }
+    return 0;
+}
+void machine_set_scroll_resume_line(ZxMachine machine, const uint16_t line) {
+    if (machine != NULL) {
+        machine->scroll_reason_resume_line = line;
+    }
 }
 void machine_set_location(ZxMachine machine, const uint16_t line, const uint8_t statement) {
     if (machine) {
@@ -189,11 +195,17 @@ ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue val
     }
 
     if (machine->numeric_variable_count >= machine->numeric_variable_capacity) {
-        machine->numeric_variable_capacity *= 2;
-        machine->numeric_vars = realloc(machine->numeric_vars, machine->numeric_variable_capacity * sizeof(NumericVariable));
-        if (machine->numeric_vars == NULL) {
+
+        size_t new_capacity = (machine->numeric_variable_capacity == 0) ? 4 : (machine->numeric_variable_capacity * 2);
+
+        NumericVariable* new_array = realloc(machine->numeric_vars, new_capacity * sizeof(NumericVariable));
+
+        if (new_array == NULL) {
             return ERR_4_OUT_OF_MEMORY;
         }
+
+        machine->numeric_vars = new_array;
+        machine->numeric_variable_capacity = new_capacity;
     }
     const int nieuw_index = machine->numeric_variable_count;
 
@@ -284,16 +296,54 @@ uint32_t machine_get_rng_state(ZxMachine machine) {
     }
     return 0;
 }
+void machine_reset(ZxMachine machine) {
+    if (machine == NULL) return;
+
+    ZxLine* program = machine_get_program(machine);
+    if (program != NULL) {
+        for (uint16_t i = 0; i < 10000; i++) {
+            if (program[i].exists) {
+                if (program[i].tokens != NULL) {
+                    free(program[i].tokens);
+                    program[i].tokens = NULL;
+                }
+                program[i].exists = false;
+                program[i].length = 0;
+            }
+        }
+    }
+
+    machine_clear_text_screen(machine);
+    machine_print_to_system(machine, ""); // Wis eventuele scroll? of error meldingen
+
+    // --- 3. Reset de machine status ---
+    machine_set_state(machine, ZX_STATE_IDLE);
+    machine->scroll_reason = ZX_SCROLL_REASON_NONE;
+
+    // --- 4. Wis de variabelen! ---
+    for (int i = 0; i < 26; i++) {
+        zx_free_string(&machine->string_variables[i]);
+        zx_init_value(&machine->string_variables[i]);
+    }
+
+    machine->numeric_variable_count = 0;
+    if (machine->numeric_vars != NULL) {
+        free(machine->numeric_vars);
+    }
+    machine->numeric_vars = NULL;
+    machine->numeric_variable_capacity = 0;
+    machine->used_basic_ram = 0;
+    machine->current_line = 0;
+    machine->current_statement = 1;
+    machine->current_edit_line = 0;
+    machine_set_rng_state(machine, 12345);
+
+    //TODO: Counter, GOSUB stack, arrays
+}
 void machine_destroy(ZxMachine machine) {
     if (machine != NULL) {
-        // Ruim eerst de dynamische array binnenin op
-        for (int i = 0; i < 26; i++) {
-            zx_free_string(&machine->string_variables[i]);
-        }
-        if (machine->numeric_vars != NULL) {
-            free(machine->numeric_vars);
-        }
-        // Ruim daarna de machine struct zelf op
+        machine_reset(machine);
+
         free(machine);
     }
 }

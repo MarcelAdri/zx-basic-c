@@ -204,6 +204,34 @@
 
     // --- 3. TOETSENBORD VANGER (Veilige Versie) ---
     document.addEventListener("keydown", function(event) {
+        const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
+
+        if (state === 2) { // 2 = ZX_STATE_WAIT_SCROLL
+            event.preventDefault();
+
+            let tokenToSend = -1;
+
+            if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
+                // VERTAALSLAG: Vraag aan C welk token bij deze toets + huidige modus hoort!
+                tokenToSend = Module.ccall(
+                    'UI_translate_keypress',
+                    'number',
+                    ['number', 'number'],
+                    [event.key.charCodeAt(0), cursorMode.charCodeAt(0)]
+                );
+            } else if (event.key === "Enter") {
+                tokenToSend = 13; // Enter is altijd 13
+            }
+
+            if (tokenToSend !== -1) {
+                Module.ccall('UI_resume_scroll', 'void', ['number', 'number'], [spectrumMachinePointer, tokenToSend]);
+                renderScreens();
+
+                // Zet na een scroll-actie de modus veiligheidshalve weer terug op [K]
+                setMode('K');
+            }
+            return; // Blokkeer verdere invoer-afhandeling!
+        }
         if (event.ctrlKey && ['f', 'l', 'g', 'k'].includes(event.key.toLowerCase())) {
             event.preventDefault();
             if (event.key.toLowerCase() === 'f') setMode('F');

@@ -99,6 +99,10 @@ static ZxError execute_cmd_list(ZxMachine machine, const uint8_t *cmd, size_t ou
     }
     return list_program(&machine, start_line, false);
 }
+static ZxError execute_cmd_new(ZxMachine machine) {
+    machine_reset(machine);
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
         machine_next_line(machine);
@@ -200,6 +204,9 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                         break;
                     case ZX_STATEMENT_LIST:
                         err = execute_cmd_list(machine, command, output_size);
+                        break;
+                    case ZX_STATEMENT_NEW:
+                        err = execute_cmd_new(machine);
                         break;
                     case ZX_STATEMENT_PRINT:
                         err = execute_cmd_print(machine, command, output_size);

@@ -93,8 +93,7 @@ ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic)
                 if (is_automatic) {
                     return ERR_0_OK;
                 } else {
-                    // TODO: Hier komt later het estafette-stokje voor de "scroll?" state!
-                    // Voor nu stoppen we gewoon veilig om crashes te voorkomen.
+                    machine_set_state(*machine, ZX_STATE_WAIT_SCROLL);
                     return ERR_0_OK;
                 }
             }
@@ -357,4 +356,60 @@ int name_to_index(const uint8_t name) {
         return lower_name - 'a';
     }
     return -1;
+}
+uint8_t* machine_serialize_program(ZxMachine machine, size_t* out_size) {
+    if (machine == NULL || out_size == NULL) {
+        if (out_size) *out_size = 0;
+        return NULL;
+    }
+
+    ZxLine* program = machine_get_program(machine);
+    if (program == NULL) {
+        *out_size = 0;
+        return NULL;
+    }
+
+    // --- PAS 1: Bereken de totale benodigde grootte ---
+    size_t total_size = 0;
+    for (uint16_t i = 0; i < 10000; i++) {
+        if (program[i].exists) {
+            // 2 bytes voor regelnummer + 2 bytes voor token-lengte + de tokens zelf
+            total_size += 2 + 2 + program[i].length;
+        }
+    }
+
+    if (total_size == 0) {
+        *out_size = 0;
+        return NULL; // Er is geen programma om op te slaan
+    }
+
+    // --- PAS 2: Geheugen reserveren ---
+    uint8_t* buffer = (uint8_t*)malloc(total_size);
+    if (buffer == NULL) {
+        *out_size = 0;
+        return NULL; // Out of memory
+    }
+
+    // --- PAS 3: Bytes wegschrijven (Little Endian formaat) ---
+    size_t offset = 0;
+    for (uint16_t i = 0; i < 10000; i++) {
+        if (program[i].exists) {
+            // 1. Regelnummer (2 bytes). Z80 processor verwacht Little Endian (Low byte eerst)
+            buffer[offset++] = i & 0xFF;         // Low byte
+            buffer[offset++] = (i >> 8) & 0xFF;  // High byte
+
+            // 2. Lengte van de tokens (2 bytes, Little Endian)
+            buffer[offset++] = program[i].length & 0xFF;
+            buffer[offset++] = (program[i].length >> 8) & 0xFF;
+
+            // 3. De daadwerkelijke tokens kopiëren
+            if (program[i].length > 0 && program[i].tokens != NULL) {
+                memcpy(&buffer[offset], program[i].tokens, program[i].length);
+                offset += program[i].length;
+            }
+        }
+    }
+
+    *out_size = total_size;
+    return buffer;
 }

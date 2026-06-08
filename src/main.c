@@ -94,10 +94,43 @@ EMSCRIPTEN_KEEPALIVE
 int UI_get_machine_state(ZxMachine machine) {
     return machine_get_state(machine);
 }
-// EMSCRIPTEN_KEEPALIVE
-// const uint8_t* UI_get_system_screen(ZxMachine machine) {
-//     return machine_get_system_screen(machine);
-// }
+EMSCRIPTEN_KEEPALIVE
+void UI_resume_scroll(ZxMachine machine, uint8_t token) {
+    if (machine == NULL) return;
+
+    // Wis de "scroll?" prompt
+    machine_print_to_system(machine, "");
+
+    // Heeft de gebruiker afgebroken?
+    if (is_no(token)) {
+        machine_set_state(machine, ZX_STATE_IDLE);
+        machine_set_scroll_reason(machine, ZX_SCROLL_REASON_NONE);
+        machine_print_error(machine, ERR_D_BREAK);
+        return;
+    }
+
+    // De gebruiker drukte niet op een nee-token, we gaan door!
+    // Kijk naar de reden van de pauze en routeer door
+    switch (machine_get_scroll_reason(machine)) {
+        case ZX_SCROLL_REASON_LIST:
+            // We waren aan het listen
+            machine_set_state(machine, ZX_STATE_IDLE);
+            machine_set_scroll_reason(machine, ZX_SCROLL_REASON_NONE);
+            list_program(&machine, machine_get_scroll_resume_line(machine), false);
+            break;
+
+        case ZX_SCROLL_REASON_RUN:
+            // We waren een programma aan het uitvoeren!
+            machine_set_state(machine, ZX_STATE_RUNNING); // State weer actief
+            machine_set_scroll_reason(machine, ZX_SCROLL_REASON_NONE);
+            // TODO: run_program(&machine); <-- Die ga je in de toekomst bouwen!
+            break;
+
+        default:
+            machine_set_state(machine, ZX_STATE_IDLE);
+            break;
+    }
+}
 EMSCRIPTEN_KEEPALIVE
 const char* UI_get_system_screen_utf8(ZxMachine machine) {
     static char screen_utf8_buffer[4096];
@@ -191,7 +224,12 @@ void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
     }
     if (line == 0) {
         ZxError err = execute(machine, buffer + i, size - i);
-        machine_print_error(machine, err);
+        if (machine_get_state(machine) != ZX_STATE_WAIT_SCROLL) {
+            machine_print_error(machine, err);
+        } else {
+            machine_print_to_system(machine, "scroll?");
+        }
+
 
     } else {
         if (i >= size) {

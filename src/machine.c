@@ -189,6 +189,46 @@ void machine_set_current_edit_line(ZxMachine machine, uint16_t line_number) {
 uint16_t machine_get_current_edit_line(ZxMachine machine) {
     return machine != NULL ? machine->current_edit_line : 0;
 }
+void machine_retrieve_current_edit_line(ZxMachine machine, uint16_t *line_number, uint8_t *line, size_t *line_length) {
+    if (machine == NULL || line == NULL || line_length == NULL || line_number == NULL) {
+        return;
+    }
+
+    uint16_t edit_line = machine_get_current_edit_line(machine);
+
+    // 1. Zoek vooruit
+    while (edit_line < 10000 && !machine->program_memory[edit_line].exists) {
+        edit_line++;
+    }
+
+    // 2. Fallback achteruit (Let op: start bij 9999, wegens array bounds!)
+    if (edit_line >= 10000) {
+        edit_line = 9999;
+        while (edit_line > 0 && !machine->program_memory[edit_line].exists) {
+            edit_line--;
+        }
+    }
+
+    // Als er écht niets is
+    if (edit_line == 0 && !machine->program_memory[0].exists) {
+        return;
+    }
+
+    // 3. CRUCIAL: Eerst de data veiligstellen in de pointers...
+    *line_number = edit_line;
+    *line_length = machine->program_memory[edit_line].length;
+
+    // ...en de VOLLEDIGE array kopiëren met memcpy!
+    if (*line_length > 0 && machine->program_memory[edit_line].tokens != NULL) {
+        memcpy(line, machine->program_memory[edit_line].tokens, *line_length);
+    }
+
+    // 4. ...en NU PAS de regel uit het programmageheugen wissen!
+    machine_delete_line(machine, edit_line);
+
+    // 5. Update de lijst (met de juiste pointer-de-referentie)
+    list_program(&machine, 0, true);
+}
 void machine_set_top_line_in_list(ZxMachine machine, const uint16_t line_number) {
     if (machine != NULL) {
         machine->top_line_in_list = line_number;

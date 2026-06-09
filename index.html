@@ -206,6 +206,12 @@
     // --- 3. TOETSENBORD VANGER (Veilige Versie) ---
     document.addEventListener("keydown", function(event) {
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
+        if ((event.shiftKey && event.code === 'Digit1') || event.key === '!') {
+            event.preventDefault();
+            Module.ccall('UI_request_edit_current_line', 'void', ['number'], [spectrumMachinePointer]);
+            return;
+        }
+
         if (event.ctrlKey && ['f', 'l', 'g', 'k'].includes(event.key.toLowerCase())) {
             event.preventDefault();
             if (event.key.toLowerCase() === 'f') setMode('F');
@@ -475,6 +481,28 @@
             console.error("FATALE JS FOUT TIJDENS SAVE:", err);
             alert("Er is een interne fout opgetreden bij het opslaan:\n" + err.message);
         }
+    }
+    function loadTokensIntoEditor(lineNumber, tokensPtr, length) {
+        inputBytes = []; // Maak de invoerregel leeg
+
+        // 1. Vertaal het regelnummer (int) naar losse cijfer-tokens
+        const lineStr = lineNumber.toString();
+        for (let i = 0; i < lineStr.length; i++) {
+            inputBytes.push(lineStr.charCodeAt(i)); // '1' -> 49, '0' -> 48, etc.
+        }
+
+        // 2. Voeg een verplichte spatie toe (token 32)
+        // Dit triggert je C-cursor-logica om de modus direct op 'K' te zetten!
+        inputBytes.push(32);
+
+        // 3. Plak de rest van de BASIC-tokens erachteraan
+        for (let i = 0; i < length; i++) {
+            inputBytes.push(Module.HEAPU8[tokensPtr + i]);
+        }
+
+        // 4. Ververs de weergave
+        autoSetCursor();
+        updateDisplay();
     }
 
 

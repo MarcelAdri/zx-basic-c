@@ -26,6 +26,22 @@
     #define EM_JS(ret, name, params, ...) ret name params { }
 #endif
 
+// 1. C roept deze functie aan als hij het LOAD commando leest
+EM_JS(void, UI_trigger_load, (ZxMachine machine), {
+    // Dit is pure JavaScript!
+    triggerLoadTape(machine);
+});
+
+// 2. C roept deze functie aan als hij SAVE "naam" leest
+EM_JS(void, UI_trigger_save, (ZxMachine machine, const char* filename_ptr), {
+    // We moeten de C-pointer naar de string eerst omzetten naar een JavaScript string
+    const jsFilename = UTF8ToString(filename_ptr);
+    triggerSaveTape(machine, jsFilename);
+});
+EM_JS(void, UI_trigger_edit, (uint16_t line_number, const uint8_t* tokens, size_t length), {
+    loadTokensIntoEditor(line_number, tokens, length);
+});
+
 static void machine_print_error(ZxMachine machine, ZxError err) {
     const char *msg = get_zx_error_message(err);
     uint16_t cur_line = machine_get_current_line(machine);
@@ -94,7 +110,6 @@ int UI_get_machine_state(ZxMachine machine) {
 EMSCRIPTEN_KEEPALIVE
 void UI_resume_scroll(ZxMachine machine, uint8_t token) {
     if (machine == NULL) return;
-    printf("token: %d\n", token);
 
     // Wis de "scroll?" prompt
     machine_print_to_system(machine, "");
@@ -127,6 +142,19 @@ void UI_resume_scroll(ZxMachine machine, uint8_t token) {
         default:
             machine_set_state(machine, ZX_STATE_IDLE);
             break;
+    }
+}
+EMSCRIPTEN_KEEPALIVE
+void UI_request_edit_current_line(ZxMachine machine) {
+    if (machine == NULL) return;
+
+    uint16_t line_number = 0;
+    uint8_t tokens[2048] = {0};
+    size_t tokens_len = 0;
+    machine_retrieve_current_edit_line(machine, &line_number, tokens, &tokens_len);
+
+    if (tokens_len > 0) {
+         UI_trigger_edit(line_number, tokens, tokens_len);
     }
 }
 EMSCRIPTEN_KEEPALIVE
@@ -186,8 +214,6 @@ char UI_get_cursor_mode(const uint8_t *buffer, const size_t length) {
     return get_expected_cursor_mode(buffer, length);
 }
 
-// Deze functie maken we beschikbaar voor JavaScript!
-#include <stdio.h>
 
 EMSCRIPTEN_KEEPALIVE
 void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
@@ -271,18 +297,6 @@ ZxError UI_deserialize_program(ZxMachine machine, const uint8_t* buffer, size_t 
     return machine_deserialize_program(machine, buffer, size);
 }
 
-// 1. C roept deze functie aan als hij het LOAD commando leest
-EM_JS(void, UI_trigger_load, (ZxMachine machine), {
-    // Dit is pure JavaScript!
-    triggerLoadTape(machine);
-});
-
-// 2. C roept deze functie aan als hij SAVE "naam" leest
-EM_JS(void, UI_trigger_save, (ZxMachine machine, const char* filename_ptr), {
-    // We moeten de C-pointer naar de string eerst omzetten naar een JavaScript string
-    const jsFilename = UTF8ToString(filename_ptr);
-    triggerSaveTape(machine, jsFilename);
-});
 
 int main(void) {
     setlocale(LC_NUMERIC, "C");

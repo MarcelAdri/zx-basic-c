@@ -58,6 +58,7 @@ void machine_set_location(ZxMachine machine, uint16_t line, uint8_t statement);
 ZxError machine_delete_line(ZxMachine machine, uint16_t line_number);
 ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8_t *tokens, size_t length);
 uint16_t machine_get_current_line(ZxMachine machine);
+void machine_retrieve_current_edit_line(ZxMachine machine, uint16_t *line_number, uint8_t *line, size_t *line_length);
 uint8_t machine_get_current_statement(ZxMachine machine);
 void machine_set_current_edit_line(ZxMachine machine, uint16_t line_number);
 uint16_t machine_get_current_edit_line(ZxMachine machine);

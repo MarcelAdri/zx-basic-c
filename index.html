@@ -175,6 +175,7 @@
     let spectrumMachinePointer = null;
     let inputBytes = []; // Onze buffer voor de ruwe uint8_t waarden
     let cursorMode = 'K'; // Start altijd in Keyword modus
+    let cursorPosition = 0; // Houdt bij waar de cursor in de byte-array staat
 
     var Module = {
         //print: function(text) { appendOutput(text, "stdout"); },
@@ -206,9 +207,58 @@
     // --- 3. TOETSENBORD VANGER (Veilige Versie) ---
     document.addEventListener("keydown", function(event) {
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
+        // --- DE EDIT TRIGGER (SHIFT + 1) ---
         if ((event.shiftKey && event.code === 'Digit1') || event.key === '!') {
             event.preventDefault();
             Module.ccall('UI_request_edit_current_line', 'void', ['number'], [spectrumMachinePointer]);
+            return;
+        }
+
+        // --- PIJLTJES (Zowel modern als historisch) ---
+        // OMHOOG (7)
+        if (event.key === 'ArrowUp' || (event.shiftKey && event.code === 'Digit7')) {
+            event.preventDefault();
+            Module.ccall('UI_move_cursor_up', 'void', ['number'], [spectrumMachinePointer]);
+            renderScreens(); // <-- DE FIX: Teken het hoofdscherm opnieuw!
+            return;
+        }
+        // OMLAAG (6)
+        if (event.key === 'ArrowDown' || (event.shiftKey && event.code === 'Digit6')) {
+            event.preventDefault();
+            Module.ccall('UI_move_cursor_down', 'void', ['number'], [spectrumMachinePointer]);
+            renderScreens(); // <-- DE FIX: Teken het hoofdscherm opnieuw!
+            return;
+        }
+        // LINKS (5)
+        if (event.key === 'ArrowLeft' || (event.shiftKey && event.code === 'Digit5')) {
+            event.preventDefault();
+            if (cursorPosition > 0) {
+                cursorPosition--;
+                autoSetCursor();
+                updateDisplay();
+            }
+            return;
+        }
+        // RECHTS (8)
+        if (event.key === 'ArrowRight' || (event.shiftKey && event.code === 'Digit8')) {
+            event.preventDefault();
+            if (cursorPosition < inputBytes.length) {
+                cursorPosition++;
+                autoSetCursor();
+                updateDisplay();
+            }
+            return;
+        }
+
+        // --- BACKSPACE UPDATE ---
+        if (event.key === "Backspace" || (event.shiftKey && event.code === 'Digit0')) {
+            if (cursorPosition > 0) {
+                // Haal 1 item weg vóór de cursor
+                inputBytes.splice(cursorPosition - 1, 1);
+                cursorPosition--;
+                autoSetCursor();
+                updateDisplay();
+            }
             return;
         }
 
@@ -279,7 +329,9 @@
 
             // GEEN JS-MAGIC MEER: We doen alleen iets als C het teken kent
             if (token !== -1) {
-                inputBytes.push(token);
+                // Voeg in OP de cursor positie, en schuif op!
+                inputBytes.splice(cursorPosition, 0, token);
+                cursorPosition++;
                 autoSetCursor();
                 updateDisplay();
             }
@@ -313,9 +365,30 @@
     // --- 4. VISUALISATIE VAN DE BYTES ---
     // --- VISUALISATIE VAN DE BYTES ---
     function updateDisplay() {
-        // We laten C nu het zware werk doen!
-        const displayText = getFormattedLine(inputBytes);
-        document.getElementById("typed-text").innerText = displayText;
+        // Veiligheidscheck
+        if (cursorPosition < 0) cursorPosition = 0;
+        if (cursorPosition > inputBytes.length) cursorPosition = inputBytes.length;
+
+        // Splits de bytes
+        const leftBytes = inputBytes.slice(0, cursorPosition);
+        const rightBytes = inputBytes.slice(cursorPosition);
+
+        // Vraag C om de twee helften mooi te maken
+        const leftText = getFormattedLine(leftBytes);
+        const rightText = getFormattedLine(rightBytes);
+
+        // Bouw de HTML veilig op (Voorkomt XSS en opmaak-breuken)
+        const lineDiv = document.getElementById("input-line");
+        lineDiv.innerHTML = ""; // Maak leeg
+
+        lineDiv.appendChild(document.createTextNode(leftText));
+
+        const cursorDiv = document.createElement("div");
+        cursorDiv.id = "cursor";
+        cursorDiv.textContent = cursorMode;
+        lineDiv.appendChild(cursorDiv);
+
+        lineDiv.appendChild(document.createTextNode(rightText));
     }
 
     // --- SLIMME CURSOR VIA C ---
@@ -325,22 +398,19 @@
             return;
         }
 
-        // Reserveer geheugen en kopieer de huidige invoer
-        const bufferPtr = Module._malloc(inputBytes.length);
-        Module.HEAPU8.set(inputBytes, bufferPtr);
+        // DE FIX: Geef alleen de tekst VÓÓR de cursor aan C,
+        // want dat bepaalt in welke modus je nú typt!
+        const leftBytes = inputBytes.slice(0, cursorPosition);
+        if (leftBytes.length === 0) {
+            setMode('K'); return;
+        }
 
-        // Vraag C om de verwachte cursor modus!
-        // C geeft een 'char' terug. Emscripten vertaalt dit naar een getal (ASCII).
-        const modeAscii = Module.ccall(
-            'UI_get_cursor_mode',
-            'number',
-            ['number', 'number'],
-            [bufferPtr, inputBytes.length]
-        );
+        const bufferPtr = Module._malloc(leftBytes.length);
+        Module.HEAPU8.set(leftBytes, bufferPtr);
 
+        const modeAscii = Module.ccall('UI_get_cursor_mode', 'number', ['number', 'number'], [bufferPtr, leftBytes.length]);
         Module._free(bufferPtr);
 
-        // Vertaal het ASCII-getal (bijv. 75) terug naar een letter ('K') en zet de modus
         setMode(String.fromCharCode(modeAscii));
     }
     function renderScreens() {
@@ -362,6 +432,7 @@
     // --- DE WASM GEHEUGEN KOPPELING ---
     function executeBuffer() {
         if (inputBytes.length === 0) return;
+        cursorPosition = inputBytes.length;
 
         // 1. Stuur de bytes naar de C-parser
         const bufferPtr = Module._malloc(inputBytes.length);
@@ -499,6 +570,7 @@
         for (let i = 0; i < length; i++) {
             inputBytes.push(Module.HEAPU8[tokensPtr + i]);
         }
+        cursorPosition = inputBytes.length;
 
         // 4. Ververs de weergave
         autoSetCursor();

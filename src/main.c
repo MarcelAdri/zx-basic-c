@@ -296,6 +296,71 @@ ZxError UI_deserialize_program(ZxMachine machine, const uint8_t* buffer, size_t 
     // Roep de originele functie uit helper.c aan
     return machine_deserialize_program(machine, buffer, size);
 }
+EMSCRIPTEN_KEEPALIVE
+void UI_move_cursor_up(ZxMachine machine) {
+    if (machine == NULL) return;
+    uint16_t line = machine_get_current_edit_line(machine);
+    ZxLine* program = machine_get_program(machine);
+
+    // 1. Zoek achteruit naar de vorige bestaande regel
+    uint16_t prev_line = line;
+    while (prev_line > 0) {
+        prev_line--;
+        if (program[prev_line].exists) {
+            machine_set_current_edit_line(machine, prev_line);
+            list_program(&machine, 0, true);
+            return;
+        }
+    }
+
+    // 2. SPOOKREGEL FIX: We vonden niets naar boven.
+    // Bestaat de regel waar we nu op staan eigenlijk wel?
+    if (!program[line].exists) {
+        // Nee! Zoek als reddingsboei de dichtstbijzijnde regel naar beneden.
+        uint16_t fallback = 0;
+        while (fallback < 9999) {
+            fallback++;
+            if (program[fallback].exists) {
+                machine_set_current_edit_line(machine, fallback);
+                list_program(&machine, 0, true);
+                return;
+            }
+        }
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void UI_move_cursor_down(ZxMachine machine) {
+    if (machine == NULL) return;
+    uint16_t line = machine_get_current_edit_line(machine);
+    ZxLine* program = machine_get_program(machine);
+
+    // 1. Zoek vooruit naar de volgende bestaande regel
+    uint16_t next_line = line;
+    while (next_line < 9999) {
+        next_line++;
+        if (program[next_line].exists) {
+            machine_set_current_edit_line(machine, next_line);
+            list_program(&machine, 0, true);
+            return;
+        }
+    }
+
+    // 2. SPOOKREGEL FIX: We vonden niets naar beneden.
+    // Bestaat de regel waar we nu op staan eigenlijk wel?
+    if (!program[line].exists) {
+        // Nee! Zoek als reddingsboei de dichtstbijzijnde regel naar boven.
+        uint16_t fallback = 9999;
+        while (fallback > 0) {
+            fallback--;
+            if (program[fallback].exists) {
+                machine_set_current_edit_line(machine, fallback);
+                list_program(&machine, 0, true);
+                return;
+            }
+        }
+    }
+}
 
 
 int main(void) {

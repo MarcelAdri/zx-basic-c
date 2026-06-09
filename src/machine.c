@@ -39,6 +39,7 @@ typedef struct Machine {
 
     ZxLine program_memory[10000];
     uint16_t current_edit_line;
+    uint16_t top_line_in_list;
     size_t used_basic_ram;
 
     uint16_t current_line;
@@ -173,14 +174,22 @@ void machine_set_current_edit_line(ZxMachine machine, uint16_t line_number) {
         machine->current_edit_line = line_number;
     }
 }
+uint16_t machine_get_current_edit_line(ZxMachine machine) {
+    return machine != NULL ? machine->current_edit_line : 0;
+}
+void machine_set_top_line_in_list(ZxMachine machine, const uint16_t line_number) {
+    if (machine != NULL) {
+        machine->top_line_in_list = line_number;
+    }
+}
+uint16_t machine_get_top_line_in_list(ZxMachine machine) {
+    return machine != NULL ? machine->top_line_in_list : 0;
+}
 ZxLine* machine_get_program(ZxMachine machine) {
     if (machine == NULL) {
         return NULL;
     }
     return machine->program_memory;
-}
-uint16_t machine_get_current_edit_line(ZxMachine machine) {
-    return machine != NULL ? machine->current_edit_line : 0;
 }
 ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value) {
     if (machine == NULL || var_name == NULL) {
@@ -414,30 +423,21 @@ static void machine_print_to_text(ZxMachine machine, const uint8_t *tokens, size
     assert(tokens != NULL && "tokens mag nooit NULL zijn in deze interne functie");
     if (machine == NULL || len == 0) return;
 
-    for (size_t i = 0; i < len; i++) {
-        uint8_t token = tokens[i];
+    char formatted_text[2048] = {0};
+    ZxError err = build_zx_sentence(tokens, len, formatted_text);
+    if (err != ERR_0_OK) return;
 
-        if (token == '\n' || token == 13) {
+    size_t formatted_len = strlen(formatted_text);
+
+    for (size_t i = 0; i < formatted_len; i++) {
+        char c = formatted_text[i];
+
+        if (c == '\n' || c == '\r') {
             machine_next_line(machine);
             continue;
         }
 
-        if (token >= 165) {
-            const char *keyword_text = get_content_from_token(token);
-            size_t kw_len = strlen(keyword_text);
-
-            for (size_t j = 0; j < kw_len; j++) {
-                machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = (uint8_t)keyword_text[j];
-                if (machine->text_cursor_x >= 31) {
-                    machine_next_line(machine);
-                } else {
-                    machine->text_cursor_x++;
-                }
-            }
-            continue;
-        }
-
-        machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = token;
+        machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = (uint8_t)c;
 
         if (machine->text_cursor_x >= 31) {
             machine_next_line(machine);
@@ -445,7 +445,6 @@ static void machine_print_to_text(ZxMachine machine, const uint8_t *tokens, size
             machine->text_cursor_x++;
         }
     }
-
 }
 void machine_print_value(ZxMachine machine, const ZxValue value) {
     if (machine == NULL) return;

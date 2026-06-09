@@ -27,34 +27,60 @@ ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic)
     ZxLine* program = machine_get_program(*machine);
     if (program == NULL) return ERR_UNKNOWN;
 
+    uint16_t top_line = machine_get_top_line_in_list(*machine);
+    bool fits_in_screen = false;
+
     uint16_t start = start_line;
     const uint16_t edit_line = machine_get_current_edit_line(*machine);
 
     if (is_automatic) {
-        // 1. More than 22 lines?
-        size_t line_counter = 0;
-        for (uint16_t i = 0; i < 10000; i++) {
-            if (program[i].exists) line_counter++;
+        if (edit_line < top_line) {
+            top_line = edit_line;
         }
 
-        if (line_counter <= 22) {
-            start = 0;
-        } else {
-            // 2. Drape around edit_line
-            line_counter = 0;
-            start = edit_line;
-            uint16_t current = edit_line;
+        while (!fits_in_screen) {
+            if (top_line == edit_line) {
+                fits_in_screen = true;
+                break;
+            }
 
-            while (current > 0 && line_counter < 10) {
-                if (program[current].exists) {
-                    line_counter++;
-                    start = current;
+            uint16_t current_calc_line = top_line;
+            uint8_t screen_lines = 0;
+
+            while (current_calc_line <= edit_line) {
+                if (program[current_calc_line].exists) {
+                    char formatted_line_text[2048];
+                    ZxError err = build_zx_sentence(program[current_calc_line].tokens, program[current_calc_line].length, formatted_line_text);
+                    if (err != ERR_0_OK) return err;
+
+                    char formatted_line_complete[2100];
+                    if (current_calc_line == edit_line) {
+                        snprintf(formatted_line_complete, sizeof(formatted_line_complete), "%u>%s", current_calc_line, formatted_line_text);
+                    } else {
+                        snprintf(formatted_line_complete, sizeof(formatted_line_complete), "%u %s", current_calc_line, formatted_line_text);
+                    }
+
+                    size_t char_count = strlen(formatted_line_complete);
+                    size_t visual_lines = (char_count + 31) / 32;
+                    screen_lines += visual_lines;
                 }
-                current--;
+                current_calc_line++;
+            }
+
+            if (screen_lines <= 22) {
+                fits_in_screen = true;
+            } else {
+                top_line++;
+                while (top_line < 10000 && !program[top_line].exists) {
+                    top_line++;
+                }
             }
         }
-    }
 
+        machine_set_top_line_in_list(*machine, top_line);
+
+        start = top_line;
+    }
     // Execute CLS
     uint8_t cmd = ZX_STATEMENT_CLS;
     size_t size = 1;
@@ -94,6 +120,8 @@ ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic)
                     return ERR_0_OK;
                 } else {
                     machine_set_state(*machine, ZX_STATE_WAIT_SCROLL);
+                    machine_set_scroll_reason(*machine, ZX_SCROLL_REASON_LIST);
+                    machine_set_scroll_resume_line(*machine, current_line + 1);
                     return ERR_0_OK;
                 }
             }

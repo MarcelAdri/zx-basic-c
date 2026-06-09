@@ -56,14 +56,6 @@ EMSCRIPTEN_KEEPALIVE
 int UI_translate_keypress(char key, char mode) {
     return get_token_from_key(key, mode);
 }
-// EMSCRIPTEN_KEEPALIVE
-// const char* UI_get_keyword_for_token(int token) {
-//     return get_content_from_token(token);
-// }
-// EMSCRIPTEN_KEEPALIVE
-// const uint8_t* UI_get_text_screen(ZxMachine machine) {
-//     return machine_get_text_screen(machine);
-// }
 EMSCRIPTEN_KEEPALIVE
 const char* UI_get_text_screen_utf8(ZxMachine machine) {
     static char screen_utf8_buffer[4096];

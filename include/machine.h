@@ -60,6 +60,8 @@ uint16_t machine_get_current_line(ZxMachine machine);
 uint8_t machine_get_current_statement(ZxMachine machine);
 void machine_set_current_edit_line(ZxMachine machine, uint16_t line_number);
 uint16_t machine_get_current_edit_line(ZxMachine machine);
+void machine_set_top_line_in_list(ZxMachine machine, uint16_t line_number);
+uint16_t machine_get_top_line_in_list(ZxMachine machine);
 ZxLine* machine_get_program(ZxMachine machine);
 void machine_set_rng_state(ZxMachine machine, uint32_t state);
 uint32_t machine_get_rng_state(ZxMachine machine);

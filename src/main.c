@@ -94,6 +94,7 @@ int UI_get_machine_state(ZxMachine machine) {
 EMSCRIPTEN_KEEPALIVE
 void UI_resume_scroll(ZxMachine machine, uint8_t token) {
     if (machine == NULL) return;
+    printf("token: %d\n", token);
 
     // Wis de "scroll?" prompt
     machine_print_to_system(machine, "");
@@ -230,8 +231,13 @@ void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
 
     } else {
         if (i >= size) {
-            //todo: wis regel
-            machine_print_to_system(machine, "0 OK, 0:1");
+            ZxError err = machine_delete_line(machine, line);
+            if (err != ERR_0_OK) {
+                machine_print_error(machine, err);
+            } else {
+                list_program(&machine, 0, true);
+                machine_print_error(machine, ERR_0_OK);
+            }
         } else {
             while (i < size && is_zx_space(buffer[i])) {
                 i++;

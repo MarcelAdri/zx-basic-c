@@ -135,6 +135,18 @@ void machine_set_location(ZxMachine machine, const uint16_t line, const uint8_t 
         machine->current_statement = statement;
     }
 }
+ZxError machine_delete_line(ZxMachine machine, const uint16_t line_number) {
+    if (machine == NULL) {
+        return ERR_UNKNOWN;
+    }
+    if (machine->program_memory[line_number].exists) {
+        free(machine->program_memory[line_number].tokens);
+        machine->program_memory[line_number].exists = false;
+        machine->program_memory[line_number].length = 0;
+    }
+    machine_set_current_edit_line(machine, line_number);
+    return ERR_0_OK;
+}
 ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8_t *tokens, size_t length) {
     size_t new_line_cost = length + 5;
 

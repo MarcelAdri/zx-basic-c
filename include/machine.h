@@ -55,6 +55,7 @@ uint16_t machine_get_scroll_resume_line(ZxMachine machine);
 void machine_set_scroll_resume_line(ZxMachine machine, const uint16_t line);
 void machine_set_state(ZxMachine machine, const ZxState state);
 void machine_set_location(ZxMachine machine, uint16_t line, uint8_t statement);
+ZxError machine_delete_line(ZxMachine machine, uint16_t line_number);
 ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8_t *tokens, size_t length);
 uint16_t machine_get_current_line(ZxMachine machine);
 uint8_t machine_get_current_statement(ZxMachine machine);

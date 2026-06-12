@@ -1807,7 +1807,9 @@ var _UI_machine_destroy = Module['_UI_machine_destroy'] = makeInvalidEarlyAccess
 var _UI_translate_keypress = Module['_UI_translate_keypress'] = makeInvalidEarlyAccess('_UI_translate_keypress');
 var _UI_get_text_screen_utf8 = Module['_UI_get_text_screen_utf8'] = makeInvalidEarlyAccess('_UI_get_text_screen_utf8');
 var _UI_get_machine_state = Module['_UI_get_machine_state'] = makeInvalidEarlyAccess('_UI_get_machine_state');
-var _UI_resume_scroll = Module['_UI_resume_scroll'] = makeInvalidEarlyAccess('_UI_resume_scroll');
+var _UI_get_wait_reason = Module['_UI_get_wait_reason'] = makeInvalidEarlyAccess('_UI_get_wait_reason');
+var _UI_execute_batch = Module['_UI_execute_batch'] = makeInvalidEarlyAccess('_UI_execute_batch');
+var _UI_resume = Module['_UI_resume'] = makeInvalidEarlyAccess('_UI_resume');
 var _UI_request_edit_current_line = Module['_UI_request_edit_current_line'] = makeInvalidEarlyAccess('_UI_request_edit_current_line');
 var _UI_get_system_screen_utf8 = Module['_UI_get_system_screen_utf8'] = makeInvalidEarlyAccess('_UI_get_system_screen_utf8');
 var _UI_format_zx_line = Module['_UI_format_zx_line'] = makeInvalidEarlyAccess('_UI_format_zx_line');
@@ -1840,7 +1842,9 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['UI_translate_keypress'] != 'undefined', 'missing Wasm export: UI_translate_keypress');
   assert(typeof wasmExports['UI_get_text_screen_utf8'] != 'undefined', 'missing Wasm export: UI_get_text_screen_utf8');
   assert(typeof wasmExports['UI_get_machine_state'] != 'undefined', 'missing Wasm export: UI_get_machine_state');
-  assert(typeof wasmExports['UI_resume_scroll'] != 'undefined', 'missing Wasm export: UI_resume_scroll');
+  assert(typeof wasmExports['UI_get_wait_reason'] != 'undefined', 'missing Wasm export: UI_get_wait_reason');
+  assert(typeof wasmExports['UI_execute_batch'] != 'undefined', 'missing Wasm export: UI_execute_batch');
+  assert(typeof wasmExports['UI_resume'] != 'undefined', 'missing Wasm export: UI_resume');
   assert(typeof wasmExports['UI_request_edit_current_line'] != 'undefined', 'missing Wasm export: UI_request_edit_current_line');
   assert(typeof wasmExports['UI_get_system_screen_utf8'] != 'undefined', 'missing Wasm export: UI_get_system_screen_utf8');
   assert(typeof wasmExports['UI_format_zx_line'] != 'undefined', 'missing Wasm export: UI_format_zx_line');
@@ -1870,7 +1874,9 @@ function assignWasmExports(wasmExports) {
   _UI_translate_keypress = Module['_UI_translate_keypress'] = createExportWrapper('UI_translate_keypress', 2);
   _UI_get_text_screen_utf8 = Module['_UI_get_text_screen_utf8'] = createExportWrapper('UI_get_text_screen_utf8', 1);
   _UI_get_machine_state = Module['_UI_get_machine_state'] = createExportWrapper('UI_get_machine_state', 1);
-  _UI_resume_scroll = Module['_UI_resume_scroll'] = createExportWrapper('UI_resume_scroll', 2);
+  _UI_get_wait_reason = Module['_UI_get_wait_reason'] = createExportWrapper('UI_get_wait_reason', 1);
+  _UI_execute_batch = Module['_UI_execute_batch'] = createExportWrapper('UI_execute_batch', 2);
+  _UI_resume = Module['_UI_resume'] = createExportWrapper('UI_resume', 2);
   _UI_request_edit_current_line = Module['_UI_request_edit_current_line'] = createExportWrapper('UI_request_edit_current_line', 1);
   _UI_get_system_screen_utf8 = Module['_UI_get_system_screen_utf8'] = createExportWrapper('UI_get_system_screen_utf8', 1);
   _UI_format_zx_line = Module['_UI_format_zx_line'] = createExportWrapper('UI_format_zx_line', 2);

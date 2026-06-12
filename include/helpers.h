@@ -18,5 +18,6 @@ ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, 
 ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expression_size, ZxValue *literal);
 ZxError machine_deserialize_program(ZxMachine machine, const uint8_t* buffer, size_t size);
 uint8_t* machine_serialize_program(ZxMachine machine, size_t* out_size);
+void extract_statement(const uint8_t *line_buffer, size_t line_size, uint8_t target_statement, const uint8_t **chunk, size_t *chunk_size);
 
 #endif //ZX_BASIC_C_HELPERS_H

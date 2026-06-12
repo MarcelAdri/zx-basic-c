@@ -23,17 +23,16 @@ typedef struct {
 
 typedef enum {
     ZX_STATE_IDLE = 0,      // Wacht op een commando onderin beeld
-    ZX_STATE_RUNNING = 1,       // Bezig met het uitvoeren van BASIC (of een commando)
-    ZX_STATE_WAIT_SCROLL = 2,   // Scherm is vol, wacht op Y/N/SPACE
-    ZX_STATE_WAIT_INPUT = 3,    // BASIC programma staat stil door een INPUT commando
-    ZX_STATE_WAIT_PAUSE = 4     // BASIC programma staat stil door PAUSE commando
+    ZX_STATE_DIRECT = 1,
+    ZX_STATE_RUNNING = 2,       // Bezig met het uitvoeren van BASIC (of een commando)
 } ZxState;
 
 typedef enum {
-    ZX_SCROLL_REASON_NONE = 0,
-    ZX_SCROLL_REASON_LIST,
-    ZX_SCROLL_REASON_RUN,
-} ZxScrollReason;
+    ZX_WAIT_NONE = 0,
+    ZX_WAIT_SCROLL = 1,
+    ZX_WAIT_INPUT = 2,
+    ZX_WAIT_PAUSE = 3
+} ZxWaitReason;
 
 ZxMachine machine_create(void);
 ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value);
@@ -49,16 +48,25 @@ const uint8_t* machine_get_text_screen(ZxMachine machine);
 const uint8_t* machine_get_from_text_screen(ZxMachine machine, uint8_t y, uint8_t x);
 const uint8_t* machine_get_from_system_screen(ZxMachine machine, uint8_t y, uint8_t x);
 ZxState machine_get_state(ZxMachine machine);
-ZxScrollReason machine_get_scroll_reason(ZxMachine machine);
-void machine_set_scroll_reason(ZxMachine machine, const ZxScrollReason reason);
-uint16_t machine_get_scroll_resume_line(ZxMachine machine);
-void machine_set_scroll_resume_line(ZxMachine machine, const uint16_t line);
-void machine_set_state(ZxMachine machine, const ZxState state);
+ZxWaitReason machine_get_wait_reason(ZxMachine machine);
+void machine_set_wait_reason(ZxMachine machine, ZxWaitReason reason);
+uint16_t machine_get_wait_resume_line(ZxMachine machine);
+void machine_set_wait_resume_line(ZxMachine machine, uint16_t line);
+void machine_set_state(ZxMachine machine, ZxState state);
 void machine_set_location(ZxMachine machine, uint16_t line, uint8_t statement);
 ZxError machine_delete_line(ZxMachine machine, uint16_t line_number);
 ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8_t *tokens, size_t length);
 uint16_t machine_get_current_line(ZxMachine machine);
+void machine_set_current_line(ZxMachine machine, uint16_t line_number);
+void machine_set_current_statement(ZxMachine machine, uint8_t statement);
+void machine_set_old_line(ZxMachine machine);
+uint16_t machine_get_old_line(ZxMachine machine);
+uint8_t machine_get_old_statement(ZxMachine machine);
+void machine_set_direct_buffer(ZxMachine machine, const uint8_t *buffer, size_t buffer_length);
+const uint8_t* machine_get_direct_buffer(ZxMachine machine, size_t *buffer_length);
 void machine_retrieve_current_edit_line(ZxMachine machine, uint16_t *line_number, uint8_t *line, size_t *line_length);
+const uint8_t* machine_retrieve_program_line(ZxMachine machine, uint16_t *line_number, size_t *line_size);
+uint16_t machine_get_next_line(ZxMachine machine, uint16_t line_num);
 uint8_t machine_get_current_statement(ZxMachine machine);
 void machine_set_current_edit_line(ZxMachine machine, uint16_t line_number);
 uint16_t machine_get_current_edit_line(ZxMachine machine);
@@ -67,6 +75,7 @@ uint16_t machine_get_top_line_in_list(ZxMachine machine);
 ZxLine* machine_get_program(ZxMachine machine);
 void machine_set_rng_state(ZxMachine machine, uint32_t state);
 uint32_t machine_get_rng_state(ZxMachine machine);
+void machine_clear_variables(ZxMachine machine);
 void machine_reset(ZxMachine machine);
 void machine_destroy(ZxMachine machine);
 void machine_next_line(ZxMachine machine);

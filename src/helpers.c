@@ -114,20 +114,22 @@ ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic)
             machine_print_value(*machine, zx_tokens);
             zx_free_string(&zx_tokens);
 
-            // Check of het scherm vol is
-            if (machine_get_text_cursor_y(*machine) >= 21) {
+            // 1. Voer de 'enter' / 'nieuwe regel' uit
+            machine_next_line(*machine);
+
+            // 2. Heeft next_line zojuist aan de noodrem getrokken?
+            if (machine_get_wait_reason(*machine) == ZX_WAIT_SCROLL) {
+
                 if (is_automatic) {
+                    // We wilden maar een klein stukje tonen. Klaar!
+                    machine_set_wait_reason(*machine, ZX_WAIT_NONE); // Reset de flag
                     return ERR_0_OK;
                 } else {
-                    machine_set_state(*machine, ZX_STATE_WAIT_SCROLL);
-                    machine_set_scroll_reason(*machine, ZX_SCROLL_REASON_LIST);
-                    machine_set_scroll_resume_line(*machine, current_line + 1);
-                    return ERR_0_OK;
+                    // Handmatige LIST: onthoud waar we waren en STOP direct!
+                    machine_set_wait_resume_line(*machine, current_line + 1);
+                    return ERR_0_OK; // <-- CRUCIAAL: Geef controle terug aan JavaScript!
                 }
             }
-
-
-            machine_next_line(*machine);
         }
         current_line++;
     }
@@ -471,4 +473,45 @@ ZxError machine_deserialize_program(ZxMachine machine, const uint8_t* buffer, si
     }
 
     return ERR_0_OK;
+}
+// Hulpfunctie om het juiste statement (gescheiden door ':') uit een regel te vissen
+void extract_statement(const uint8_t *line_buffer, size_t line_size, uint8_t target_statement, const uint8_t **chunk, size_t *chunk_size) {
+    size_t current_start = 0;
+    uint8_t current_stmt_idx = 1; // Sinclair telt statements meestal vanaf 1
+    bool in_quotes = false;
+
+    for (size_t i = 0; i < line_size; i++) {
+        // Toggle de 'in_quotes' vlag als we een aanhalingsteken zien
+        // (Vervang '"' eventueel door jouw constante, bijv. ZX_CHAR_QUOTE)
+        if (is_zx_quotes(line_buffer[i])) {
+            in_quotes = !in_quotes;
+        }
+
+        // We zoeken naar de dubbele punt ':' (als we niet in een string zitten!)
+        if (is_zx_colon(line_buffer[i]) && !in_quotes) {
+
+            // Hebben we ons doel-statement gevonden?
+            if (current_stmt_idx == target_statement) {
+                *chunk = line_buffer + current_start;
+                *chunk_size = i - current_start;
+                return;
+            }
+
+            // Zo niet, schuif de start-pointer op en verhoog de teller
+            current_start = i + 1;
+            current_stmt_idx++;
+        }
+    }
+
+    // Als we aan het einde van de buffer zijn, checken we het allerlaatste statement
+    // (Dit is het statement zónder dubbele punt aan het einde)
+    if (current_stmt_idx == target_statement) {
+        *chunk = line_buffer + current_start;
+        *chunk_size = line_size - current_start;
+        return;
+    }
+
+    // Niet gevonden (bijv. target_statement was 3, maar er waren er maar 2)
+    *chunk = NULL;
+    *chunk_size = 0;
 }

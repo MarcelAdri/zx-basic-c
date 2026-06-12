@@ -75,6 +75,7 @@
 #define ZX_STATEMENT_LOAD 239
 #define ZX_STATEMENT_NEW 230
 #define ZX_STATEMENT_PRINT 245
+#define ZX_STATEMENT_RUN 247
 #define ZX_STATEMENT_SAVE 248
 #define ZX_STATEMENT_STOP 226
 
@@ -91,6 +92,7 @@ bool is_zx_alnum(uint8_t c);
 bool is_zx_alpha(uint8_t c);
 bool is_zx_space(uint8_t c);
 bool is_no(uint8_t c);
+bool is_zx_colon(uint8_t c);
 bool is_zx_number_character(uint8_t c);
 bool is_zx_digit_character(uint8_t c);
 bool is_zx_relational_character(uint8_t c);
@@ -100,6 +102,7 @@ bool is_zx_minus_character(uint8_t c);
 bool is_zx_asterisk_character(uint8_t c);
 bool is_zx_slash_character(uint8_t c);
 bool is_zx_power_character(uint8_t c);
+bool is_zx_quotes(uint8_t c);
 bool is_num_function_num_arg(uint8_t c);
 bool is_num_function_no_arg(uint8_t c);
 bool is_num_function_str_arg(uint8_t c);

@@ -108,40 +108,70 @@ int UI_get_machine_state(ZxMachine machine) {
     return machine_get_state(machine);
 }
 EMSCRIPTEN_KEEPALIVE
-void UI_resume_scroll(ZxMachine machine, uint8_t token) {
+int UI_get_wait_reason(ZxMachine machine) {
+    return machine_get_wait_reason(machine);
+}
+EMSCRIPTEN_KEEPALIVE
+void UI_execute_batch(ZxMachine machine, int max_statements) {
     if (machine == NULL) return;
 
-    // Wis de "scroll?" prompt
-    machine_print_to_system(machine, "");
+    for (int i = 0; i < max_statements; i++) {
 
-    // Heeft de gebruiker afgebroken?
-    if (is_no(token)) {
-        machine_set_state(machine, ZX_STATE_IDLE);
-        machine_set_scroll_reason(machine, ZX_SCROLL_REASON_NONE);
-        machine_print_error(machine, ERR_D_BREAK);
-        return;
+        // 1. Voer één statement uit (Slicer + Switch)
+        ZxError err = execute_single_step(machine);
+
+        // 2. Trekt de machine aan de noodrem voor UI-interactie?
+        if (machine_get_wait_reason(machine) != ZX_WAIT_NONE) {
+
+            if (machine_get_wait_reason(machine) == ZX_WAIT_SCROLL) {
+                machine_print_to_system(machine, "scroll?");
+            }
+            // (Later kun je hier INPUT of PAUSE afhandelen)
+
+            break; // Stop de batch! JavaScript (via UI_resume) lost het verder op.
+        }
+
+        // 3. Is er een runtime error gecrasht? (bijv. Division by Zero)
+        if (err != ERR_0_OK) {
+            machine_set_state(machine, ZX_STATE_IDLE); // Forceer stop
+            machine_print_error(machine, err);         // Print de foutmelding
+            break;
+        }
+
+        // 4. Zijn we natuurlijk klaargekomen met de code?
+        if (machine_get_state(machine) == ZX_STATE_IDLE) {
+            machine_print_error(machine, ERR_0_OK); // Print "0 OK"
+            break;
+        }
     }
+}
+EMSCRIPTEN_KEEPALIVE
+void UI_resume(ZxMachine machine, uint8_t token) {
+    if (machine == NULL) return;
 
-    // De gebruiker drukte niet op een nee-token, we gaan door!
-    // Kijk naar de reden van de pauze en routeer door
-    switch (machine_get_scroll_reason(machine)) {
-        case ZX_SCROLL_REASON_LIST:
-            // We waren aan het listen
-            machine_set_state(machine, ZX_STATE_IDLE);
-            machine_set_scroll_reason(machine, ZX_SCROLL_REASON_NONE);
-            list_program(&machine, machine_get_scroll_resume_line(machine), false);
+    // Waarom stonden we stil?
+    switch (machine_get_wait_reason(machine)) {
+        case ZX_WAIT_NONE:    // We stonden niet stil, we horen hier niet te zijn
+            return;
+
+        case ZX_WAIT_SCROLL:
+            if (is_no(token)) {
+                // 1. De gebruiker drukt op 'N' of 'STOP': we breken af!
+                machine_set_old_line(machine);             // Sla huidige positie op voor CONTINUE
+                machine_set_wait_reason(machine, ZX_WAIT_NONE); // Hef de blokkade op
+                machine_set_state(machine, ZX_STATE_IDLE); // Terug naar de '>' prompt
+                machine_print_error(machine, ERR_D_BREAK); // Toon "D BREAK - CONT repeats"
+                return;
+            }
+
+            // 2. De gebruiker drukt op Spatie (of een andere toets): we gaan door!
+            machine_print_to_system(machine, "");          // Wis de "scroll?" tekst onderin
+            machine_set_wait_reason(machine, ZX_WAIT_NONE); // Hef de blokkade op
             break;
 
-        case ZX_SCROLL_REASON_RUN:
-            // We waren een programma aan het uitvoeren!
-            machine_set_state(machine, ZX_STATE_RUNNING); // State weer actief
-            machine_set_scroll_reason(machine, ZX_SCROLL_REASON_NONE);
-            // TODO: run_program(&machine); <-- Die ga je in de toekomst bouwen!
-            break;
-
-        default:
-            machine_set_state(machine, ZX_STATE_IDLE);
-            break;
+        case ZX_WAIT_INPUT:  // TODO
+        case ZX_WAIT_PAUSE:  // TODO
+            return;
     }
 }
 EMSCRIPTEN_KEEPALIVE
@@ -246,14 +276,16 @@ void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
         }
 
     }
-    if (line == 0) {
-        ZxError err = execute(machine, buffer + i, size - i);
-        if (machine_get_state(machine) != ZX_STATE_WAIT_SCROLL) {
-            machine_print_error(machine, err);
-        } else {
-            machine_print_to_system(machine, "scroll?");
-        }
+    while (i < size && is_zx_space(buffer[i])) {
+        i++;
+    }
 
+    if (line == 0) {
+        // 1. Het is een direct commando. Zet het in de speciale buffer.
+        machine_set_direct_buffer(machine, buffer + i, size - i);
+
+        // 2. Zet het stoplicht op groen voor JavaScript!
+        machine_set_state(machine, ZX_STATE_DIRECT);
 
     } else {
         if (i >= size) {
@@ -265,9 +297,7 @@ void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
                 machine_print_error(machine, ERR_0_OK);
             }
         } else {
-            while (i < size && is_zx_space(buffer[i])) {
-                i++;
-            }
+            
             ZxError err = machine_insert_line(machine, line, buffer + i, size - i);
             if (err != ERR_0_OK) {
                 machine_print_error(machine, err);

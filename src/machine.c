@@ -28,8 +28,8 @@ typedef struct {
 
 typedef struct Machine {
     ZxState state;
-    ZxScrollReason scroll_reason;
-    uint16_t scroll_reason_resume_line;
+    ZxWaitReason wait_reason;
+    uint16_t wait_reason_resume_line;
 
     uint8_t text_screen[22][32];
     uint8_t system_screen[2][32];
@@ -44,6 +44,12 @@ typedef struct Machine {
 
     uint16_t current_line;
     uint8_t current_statement;
+
+    uint16_t old_line;
+    uint8_t old_statement;
+
+    uint8_t direct_buffer[2048];
+    size_t direct_length;
 
     ZxValue string_variables[26];
 
@@ -107,26 +113,26 @@ void machine_set_state(ZxMachine machine, const ZxState state) {
         machine->state = state;
     }
 }
-ZxScrollReason machine_get_scroll_reason(ZxMachine machine) {
+ZxWaitReason machine_get_wait_reason(ZxMachine machine) {
     if (machine != NULL) {
-        return machine->scroll_reason;
+        return machine->wait_reason;
     }
-    return ZX_SCROLL_REASON_NONE;
+    return ZX_WAIT_NONE;
 }
-void machine_set_scroll_reason(ZxMachine machine, const ZxScrollReason reason) {
+void machine_set_wait_reason(ZxMachine machine, const ZxWaitReason reason) {
     if (machine != NULL) {
-        machine->scroll_reason = reason;
+        machine->wait_reason = reason;
     }
 }
-uint16_t machine_get_scroll_resume_line(ZxMachine machine) {
+uint16_t machine_get_wait_resume_line(ZxMachine machine) {
     if (machine != NULL) {
-        return machine->scroll_reason_resume_line;
+        return machine->wait_reason_resume_line;
     }
     return 0;
 }
-void machine_set_scroll_resume_line(ZxMachine machine, const uint16_t line) {
+void machine_set_wait_resume_line(ZxMachine machine, const uint16_t line) {
     if (machine != NULL) {
-        machine->scroll_reason_resume_line = line;
+        machine->wait_reason_resume_line = line;
     }
 }
 void machine_set_location(ZxMachine machine, const uint16_t line, const uint8_t statement) {
@@ -165,8 +171,9 @@ ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8
         free(machine->program_memory[line_number].tokens);
     }
 
-    machine->program_memory[line_number].tokens = malloc(length);
+    machine->program_memory[line_number].tokens = malloc(length + 1);
     memcpy(machine->program_memory[line_number].tokens, tokens, length);
+    machine->program_memory[line_number].tokens[length] = '\0';
     machine->program_memory[line_number].length = length;
     machine->program_memory[line_number].exists = true;
 
@@ -177,9 +184,52 @@ ZxError machine_insert_line(ZxMachine machine, uint16_t line_number, const uint8
 uint16_t machine_get_current_line(ZxMachine machine) {
     return machine ? machine->current_line : 0;
 }
-
+void machine_set_current_line(ZxMachine machine, uint16_t line_number) {
+    if (machine == NULL) return;
+    machine->current_line = line_number;
+}
 uint8_t machine_get_current_statement(ZxMachine machine) {
     return machine ? machine->current_statement : 1;
+}
+void machine_set_current_statement(ZxMachine machine, uint8_t statement) {
+    if (machine == NULL) return;
+    machine->current_statement = statement;
+}
+void machine_set_old_line(ZxMachine machine) {
+    machine->old_line = machine->current_line;
+    machine->old_statement = machine->current_statement;
+}
+uint16_t machine_get_old_line(ZxMachine machine) {
+    return machine ? machine->old_line : 0;
+}
+uint8_t machine_get_old_statement(ZxMachine machine) {
+    return machine ? machine->old_statement : 1;
+}
+void machine_set_direct_buffer(ZxMachine machine, const uint8_t *buffer, size_t buffer_length) {
+    if (machine == NULL || buffer == NULL) return;
+
+    size_t max_size = sizeof(machine->direct_buffer);
+    if (buffer_length > max_size) {
+        buffer_length = max_size;
+    }
+    memset(machine->direct_buffer, 0, max_size);
+    memcpy(machine->direct_buffer, buffer, buffer_length);
+    machine->direct_length = buffer_length;
+
+    machine_set_current_line(machine, 0);
+    machine_set_current_statement(machine, 1);
+}
+const uint8_t* machine_get_direct_buffer(ZxMachine machine, size_t *buffer_length) {
+    if (machine == NULL) {
+        if (buffer_length != NULL) *buffer_length = 0;
+        return NULL;
+    }
+
+    if (buffer_length != NULL) {
+        *buffer_length = machine->direct_length;
+    }
+
+    return machine->direct_buffer;
 }
 void machine_set_current_edit_line(ZxMachine machine, uint16_t line_number) {
     if (machine != NULL) {
@@ -196,38 +246,68 @@ void machine_retrieve_current_edit_line(ZxMachine machine, uint16_t *line_number
 
     uint16_t edit_line = machine_get_current_edit_line(machine);
 
+    // 1. Vang het interne adres op in een TIJDELIJKE pointer
+    const uint8_t *internal_tokens = machine_retrieve_program_line(machine, &edit_line, line_length);
+
+    // 2. Kopieer van het interne geheugen naar de veilige buffer ('line')
+    if (*line_length > 0 && internal_tokens != NULL) {
+        memcpy(line, internal_tokens, *line_length);
+    }
+
+    *line_number = edit_line;
+
+    // 3. Nu de data veilig is gekopieerd naar de 'line' buffer,
+    // mogen we de originele interne regel veilig wissen!
+    machine_delete_line(machine, edit_line);
+
+    // 4. Update de lijst
+    list_program(&machine, 0, true);
+}
+const uint8_t* machine_retrieve_program_line(ZxMachine machine, uint16_t *line_number, size_t *line_size) {
+    if (machine == NULL || line_number == NULL || line_size == NULL) {
+        return NULL;
+    }
+
+    uint16_t line_num = *line_number;
+
     // 1. Zoek vooruit
-    while (edit_line < 10000 && !machine->program_memory[edit_line].exists) {
-        edit_line++;
+    while (line_num < 10000 && !machine->program_memory[line_num].exists) {
+        line_num++;
     }
 
     // 2. Fallback achteruit (Let op: start bij 9999, wegens array bounds!)
-    if (edit_line >= 10000) {
-        edit_line = 9999;
-        while (edit_line > 0 && !machine->program_memory[edit_line].exists) {
-            edit_line--;
+    if (line_num >= 10000) {
+        line_num = 9999;
+        while (line_num > 0 && !machine->program_memory[line_num].exists) {
+            line_num--;
         }
     }
 
     // Als er écht niets is
-    if (edit_line == 0 && !machine->program_memory[0].exists) {
-        return;
+    if (line_num == 0 && !machine->program_memory[0].exists) {
+        return NULL;
     }
 
     // 3. CRUCIAL: Eerst de data veiligstellen in de pointers...
-    *line_number = edit_line;
-    *line_length = machine->program_memory[edit_line].length;
+    *line_number = line_num;
+    *line_size = machine->program_memory[line_num].length;
 
     // ...en de VOLLEDIGE array kopiëren met memcpy!
-    if (*line_length > 0 && machine->program_memory[edit_line].tokens != NULL) {
-        memcpy(line, machine->program_memory[edit_line].tokens, *line_length);
+    if (*line_size > 0 && machine->program_memory[line_num].tokens != NULL) {
+        return machine->program_memory[line_num].tokens;
     }
-
-    // 4. ...en NU PAS de regel uit het programmageheugen wissen!
-    machine_delete_line(machine, edit_line);
-
-    // 5. Update de lijst (met de juiste pointer-de-referentie)
-    list_program(&machine, 0, true);
+    return NULL;
+}
+uint16_t machine_get_next_line(ZxMachine machine, const uint16_t line_num) {
+    uint16_t next_line = line_num;
+    next_line++;
+    while (next_line < 10000 && !machine->program_memory[next_line].exists) {
+        next_line++;
+    }
+    if (next_line <= 9999 && machine->program_memory[next_line].exists) {
+        return next_line;
+    }
+    return 0;
 }
 void machine_set_top_line_in_list(ZxMachine machine, const uint16_t line_number) {
     if (machine != NULL) {
@@ -357,6 +437,17 @@ uint32_t machine_get_rng_state(ZxMachine machine) {
     }
     return 0;
 }
+void machine_clear_variables(ZxMachine machine) {
+    machine->numeric_variable_count = 0;
+    if (machine->numeric_vars != NULL) {
+        free(machine->numeric_vars);
+    }
+    machine->numeric_vars = NULL;
+    machine->numeric_variable_capacity = 0;
+    machine->used_basic_ram = 0;
+
+    //TODO: Counter, arrays
+}
 void machine_reset(ZxMachine machine) {
     if (machine == NULL) return;
 
@@ -379,27 +470,16 @@ void machine_reset(ZxMachine machine) {
 
     // --- 3. Reset de machine status ---
     machine_set_state(machine, ZX_STATE_IDLE);
-    machine->scroll_reason = ZX_SCROLL_REASON_NONE;
+    machine->wait_reason = ZX_WAIT_NONE;
 
-    // --- 4. Wis de variabelen! ---
-    for (int i = 0; i < 26; i++) {
-        zx_free_string(&machine->string_variables[i]);
-        zx_init_value(&machine->string_variables[i]);
-    }
+    machine_clear_variables(machine);
 
-    machine->numeric_variable_count = 0;
-    if (machine->numeric_vars != NULL) {
-        free(machine->numeric_vars);
-    }
-    machine->numeric_vars = NULL;
-    machine->numeric_variable_capacity = 0;
-    machine->used_basic_ram = 0;
     machine->current_line = 0;
     machine->current_statement = 1;
     machine->current_edit_line = 0;
     machine_set_rng_state(machine, 12345);
 
-    //TODO: Counter, GOSUB stack, arrays
+    //TODO: GOSUB stack
 }
 void machine_destroy(ZxMachine machine) {
     if (machine != NULL) {
@@ -464,8 +544,8 @@ void machine_next_line(ZxMachine machine) {
     machine->text_cursor_x = 0;
     machine->text_cursor_y++;
     if (machine->text_cursor_y > 21) {
-        machine->state = ZX_STATE_WAIT_SCROLL;
-        memmove(&machine->text_screen[0][0], &machine->text_screen[1][0], 21 * 32);
+        machine->wait_reason = ZX_WAIT_SCROLL;
+        memmove(&machine->text_screen[0][0], &machine->text_screen[1][0], 21 * 32); //TODO: move screen update to resume
         memset(&machine->text_screen[21][0], ' ', 32);
         machine->text_cursor_y = 21;
     }

@@ -34,7 +34,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
                 in_variable_name = false;
                 in_expression = true;
                 size_t dummy_bytes_read;
-                err = parse_variable_name(variable_name, output_size, var_name, &dummy_bytes_read);
+                err = parse_variable_name(variable_name, name_size, var_name, &dummy_bytes_read);
                 if (err != ERR_0_OK) {
                     return err;
                 }
@@ -194,6 +194,46 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
 
     return ERR_0_OK;
 }
+static ZxError execute_cmd_run(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    machine_clear_variables(machine);
+
+    if (output_size <= 1) {
+        machine_set_current_line(machine, 1);
+    } else {
+        ZxValue arg;
+        zx_init_value(&arg);
+        size_t dummy_bytes_read;
+
+        ZxError err = solve_expression(machine, cmd + 1, output_size - 1, &arg, &dummy_bytes_read);
+        if (err != ERR_0_OK) {
+            zx_free_string(&arg);
+            return err;
+        }
+        if (arg.type != ZX_TYPE_NUMBER) {
+            zx_free_string(&arg);
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+
+        double line_num;
+        zx_get_number(arg, &line_num);
+        zx_free_string(&arg); // Kan direct na het uitlezen!
+
+        if (line_num < 1) {
+            line_num = 1;
+        }
+        if (line_num > 9999) {
+            return ERR_B_INTEGER_OUT_OF_RANGE;
+        }
+
+        machine_set_current_line(machine, (uint16_t)line_num);
+    }
+
+    machine_set_current_statement(machine, 1);
+
+    machine_set_state(machine, ZX_STATE_RUNNING);
+
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_save(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
         return ERR_C_NONSENSE_IN_BASIC;
@@ -236,75 +276,94 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
     if (machine == NULL || input == NULL || input_size == 0) {
         return ERR_UNKNOWN;
     }
-    size_t output_size = 0;
-    size_t output_counter = 0;
-    size_t input_counter = 0;
-    bool in_string_literal = false;
-    uint8_t command[input_size];
-    uint8_t statement_counter = 1;
-
-    ZxError err;
-    while (input_counter <= input_size) {
-        if (input[input_counter] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
-            in_string_literal = !in_string_literal;
-        }
-        if (input_counter == input_size ||
-                (!in_string_literal &&
-                input[input_counter] == get_token_from_key(':', KEYMAP_MODE_LITERAL))) {
-
-            output_size = output_counter;
-
-            if (output_size > 0) {
-                machine_set_location(machine, 0, statement_counter);
-                switch (command[0]) {
-                    case ZX_STATEMENT_CLS:
-                        if (output_size != 1) {
-                            return ERR_C_NONSENSE_IN_BASIC;
-                        }
-                        err = execute_cmd_cls(machine);
-                        break;
-                    case ZX_STATEMENT_LET:
-                        err = execute_cmd_let(machine, command, output_size);
-                        break;
-                    case ZX_STATEMENT_LIST:
-                        err = execute_cmd_list(machine, command, output_size);
-                        break;
-                    case ZX_STATEMENT_LOAD:
-                        err = execute_cmd_load(machine, command, output_size);
-                        break;
-                    case ZX_STATEMENT_NEW:
-                        err = execute_cmd_new(machine);
-                        break;
-                    case ZX_STATEMENT_PRINT:
-                        err = execute_cmd_print(machine, command, output_size);
-                        break;
-                    case ZX_STATEMENT_SAVE:
-                        err = execute_cmd_save(machine, command, output_size);
-                        break;
-                    default:
-                        return ERR_NOT_YET_IMPLEMENTED;
-                }
-                if (err != ERR_0_OK) {
-                    return err;
-                }
+    switch (input[0]) {
+        case ZX_STATEMENT_CLS:
+            if (input_size != 1) {
+                return ERR_C_NONSENSE_IN_BASIC;
             }
-
-            output_counter = 0;
-            statement_counter++;
-
-            if (input_counter == input_size) {
-                break;
+            return execute_cmd_cls(machine);
+        case ZX_STATEMENT_LET:
+            return execute_cmd_let(machine, input, input_size);
+        case ZX_STATEMENT_LIST:
+            return execute_cmd_list(machine, input, input_size);
+        case ZX_STATEMENT_LOAD:
+            return execute_cmd_load(machine, input, input_size);
+        case ZX_STATEMENT_NEW:
+            if (input_size != 1) {
+                return ERR_C_NONSENSE_IN_BASIC;
             }
+            return execute_cmd_new(machine);
+        case ZX_STATEMENT_PRINT:
+            return execute_cmd_print(machine, input, input_size);
+        case ZX_STATEMENT_RUN:
+            return execute_cmd_run(machine, input, input_size);
+        case ZX_STATEMENT_SAVE:
+            return execute_cmd_save(machine, input, input_size);
+        default:
+            return ERR_NOT_YET_IMPLEMENTED;
+    }
+}
+ZxError execute_single_step(ZxMachine machine) {
+    uint16_t current_line = machine_get_current_line(machine);
+    uint8_t current_statement = machine_get_current_statement(machine);
 
-            input_counter++;
-            continue;
-        }
+    const uint8_t *line_buffer = NULL;
+    size_t line_size = 0;
 
-        command[output_counter] = input[input_counter];
-        input_counter++;
-        output_counter++;
+    // 1. Waar halen we de code vandaan?
+    if (current_line == 0) {
+        line_buffer = machine_get_direct_buffer(machine, &line_size);
+    } else {
+        line_buffer = machine_retrieve_program_line(machine, &current_line, &line_size);
+
+        // BUGFIX 1: Synchroniseer de eventueel vooruitgespoelde regel direct terug naar de machine!
+        machine_set_current_line(machine, current_line);
     }
 
-    return ERR_0_OK;
+    // 2. We hebben niets meer? Dan zijn we natuurlijk klaar met dit programma/commando!
+    if (line_buffer == NULL || line_size == 0) {
+        machine_set_state(machine, ZX_STATE_IDLE);
+        return ERR_0_OK;
+    }
+
+    // 3. DE SLICER: Zoek het juiste 'hapklare brok' op basis van current_statement
+    const uint8_t *chunk = NULL;
+    size_t chunk_size = 0;
+    extract_statement(line_buffer, line_size, current_statement, &chunk, &chunk_size);
+
+    // 4. Zijn er geen statements meer op deze regel? Ga naar de volgende regel!
+    if (chunk_size == 0) {
+        if (current_line == 0) {
+            // Direct mode is klaar!
+            machine_set_state(machine, ZX_STATE_IDLE);
+
+            // BUGFIX 2: Zet pointer terug naar het laatst uitgevoerde statement voor historische accuraatheid
+            machine_set_current_statement(machine, current_statement - 1);
+            return ERR_0_OK;
+        } else {
+            // Programma mode: Zoek de volgende regel in het geheugen!
+            uint16_t next_line = machine_get_next_line(machine, current_line);
+            if (next_line == 0) {
+                machine_set_state(machine, ZX_STATE_IDLE); // Einde programma!
+
+                // BUGFIX 2: Zet pointer terug naar het laatst uitgevoerde statement!
+                machine_set_current_statement(machine, current_statement - 1);
+            } else {
+                machine_set_current_line(machine, next_line);
+                machine_set_current_statement(machine, 1);
+            }
+            return ERR_0_OK; // Blijf vrolijk doordraaien in de batch
+        }
+    }
+
+    // 5. Voer het hapklare brok uit!
+    ZxError err = execute(machine, chunk, chunk_size);
+
+    // 6. De administratie: Schuif de pointer op voor de volgende ronde!
+    if (err == ERR_0_OK && chunk[0] != ZX_STATEMENT_RUN) {
+        machine_set_current_statement(machine, current_statement + 1);
+    }
+
+    return err;
 }
 

@@ -8,5 +8,6 @@
 #include "machine.h"
 
 ZxError execute(ZxMachine machine, const uint8_t *input, size_t input_size);
+ZxError execute_single_step(ZxMachine machine);
 
 #endif //ZX_BASIC_C_EXECUTE_H

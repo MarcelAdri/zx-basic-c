@@ -176,6 +176,19 @@
     let inputBytes = []; // Onze buffer voor de ruwe uint8_t waarden
     let cursorMode = 'K'; // Start altijd in Keyword modus
     let cursorPosition = 0; // Houdt bij waar de cursor in de byte-array staat
+    // --- STATE ENUMS (Gespiegeld uit C) ---
+    const ZxState = Object.freeze({
+        IDLE: 0,
+        DIRECT: 1,
+        RUNNING: 2
+    });
+
+    const ZxWaitReason = Object.freeze({
+        NONE: 0,
+        SCROLL: 1,
+        INPUT: 2,
+        PAUSE: 3
+    });
 
     var Module = {
         //print: function(text) { appendOutput(text, "stdout"); },
@@ -202,11 +215,13 @@
 
         renderScreens();
         updateDisplay();
+        // Start de hartslag!
+        requestAnimationFrame(emulatorRunLoop);
     }
 
     // --- 3. TOETSENBORD VANGER (Veilige Versie) ---
     document.addEventListener("keydown", function(event) {
-        const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
+        const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
         // --- DE EDIT TRIGGER (SHIFT + 1) ---
         if ((event.shiftKey && event.code === 'Digit1') || event.key === '!') {
             event.preventDefault();
@@ -271,7 +286,7 @@
             return;
         }
 
-        if (state === 2) { // 2 = ZX_STATE_WAIT_SCROLL
+        if (waitReason === ZxWaitReason.SCROLL) {
             event.preventDefault();
 
             let tokenToSend = -1;
@@ -297,7 +312,7 @@
             }
 
             if (tokenToSend !== -1) {
-                Module.ccall('UI_resume_scroll', 'void', ['number', 'number'], [spectrumMachinePointer, tokenToSend]);
+                Module.ccall('UI_resume', 'void', ['number', 'number'], [spectrumMachinePointer, tokenToSend]);
                 renderScreens();
 
                 // Zet na een scroll-actie de modus veiligheidshalve weer terug
@@ -446,13 +461,11 @@
         );
         Module._free(bufferPtr);
 
-        // 2. Haal de verversde videobuffers op uit C en teken ze!
-        renderScreens();
-
         // 3. Wist de invoerregel in de HTML
         inputBytes = [];
         setMode('K');
         updateDisplay();
+        renderScreens();
     }
     function triggerLoadTape(targetMachinePointer) {
         const fileInput = document.getElementById('tapeLoader');
@@ -576,7 +589,29 @@
         autoSetCursor();
         updateDisplay();
     }
+    // --- DE TURBO LOOP ---
+    function emulatorRunLoop() {
+        if (!spectrumMachinePointer) {
+            requestAnimationFrame(emulatorRunLoop);
+            return;
+        }
 
+        const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
+        const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
+
+        // Mogen we rekenen?
+        if (waitReason === ZxWaitReason.NONE && (state === ZxState.RUNNING || state === ZxState.DIRECT)) {
+
+            // Geef C de zweep: voer 500 statements uit in deze milliseconde!
+            Module.ccall('UI_execute_batch', 'void', ['number', 'number'], [spectrumMachinePointer, 500]);
+
+            // Ververs het beeldscherm nadat de batch klaar is (of halverwege pauzeerde)
+            renderScreens();
+        }
+
+        // Vraag de browser om het volgende frame
+        requestAnimationFrame(emulatorRunLoop);
+    }
 
 </script>
 <script src="zx_basic.js"></script>

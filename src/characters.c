@@ -615,6 +615,12 @@ bool is_no(const uint8_t c) {
         }
     return false;
 }
+bool is_zx_colon(const uint8_t c) {
+    if (c == 58) {
+        return true;
+    }
+    return false;
+}
 bool is_zx_plus_character(const uint8_t c) {
     if (c == ZX_OP_PLUS) {
         return true;
@@ -641,6 +647,12 @@ bool is_zx_slash_character(const uint8_t c) {
 }
 bool is_zx_power_character(const uint8_t c) {
     if (c == ZX_OP_POWER) {
+        return true;
+    }
+    return false;
+}
+bool is_zx_quotes(const uint8_t c) {
+    if (c == 34) {
         return true;
     }
     return false;

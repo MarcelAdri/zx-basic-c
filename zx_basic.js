@@ -1820,6 +1820,7 @@ var _UI_serialize_program = Module['_UI_serialize_program'] = makeInvalidEarlyAc
 var _UI_deserialize_program = Module['_UI_deserialize_program'] = makeInvalidEarlyAccess('_UI_deserialize_program');
 var _UI_move_cursor_up = Module['_UI_move_cursor_up'] = makeInvalidEarlyAccess('_UI_move_cursor_up');
 var _UI_move_cursor_down = Module['_UI_move_cursor_down'] = makeInvalidEarlyAccess('_UI_move_cursor_down');
+var _UI_tick_frame = Module['_UI_tick_frame'] = makeInvalidEarlyAccess('_UI_tick_frame');
 var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
 var _fflush = makeInvalidEarlyAccess('_fflush');
 var _emscripten_stack_get_end = makeInvalidEarlyAccess('_emscripten_stack_get_end');
@@ -1855,6 +1856,7 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['UI_deserialize_program'] != 'undefined', 'missing Wasm export: UI_deserialize_program');
   assert(typeof wasmExports['UI_move_cursor_up'] != 'undefined', 'missing Wasm export: UI_move_cursor_up');
   assert(typeof wasmExports['UI_move_cursor_down'] != 'undefined', 'missing Wasm export: UI_move_cursor_down');
+  assert(typeof wasmExports['UI_tick_frame'] != 'undefined', 'missing Wasm export: UI_tick_frame');
   assert(typeof wasmExports['main'] != 'undefined', 'missing Wasm export: main');
   assert(typeof wasmExports['fflush'] != 'undefined', 'missing Wasm export: fflush');
   assert(typeof wasmExports['emscripten_stack_get_end'] != 'undefined', 'missing Wasm export: emscripten_stack_get_end');
@@ -1887,6 +1889,7 @@ function assignWasmExports(wasmExports) {
   _UI_deserialize_program = Module['_UI_deserialize_program'] = createExportWrapper('UI_deserialize_program', 3);
   _UI_move_cursor_up = Module['_UI_move_cursor_up'] = createExportWrapper('UI_move_cursor_up', 1);
   _UI_move_cursor_down = Module['_UI_move_cursor_down'] = createExportWrapper('UI_move_cursor_down', 1);
+  _UI_tick_frame = Module['_UI_tick_frame'] = createExportWrapper('UI_tick_frame', 1);
   _main = Module['_main'] = createExportWrapper('main', 2);
   _fflush = createExportWrapper('fflush', 1);
   _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'];

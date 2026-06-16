@@ -391,6 +391,10 @@ void UI_move_cursor_down(ZxMachine machine) {
         }
     }
 }
+EMSCRIPTEN_KEEPALIVE
+void UI_tick_frame(ZxMachine machine) {
+    machine_tick_frame(machine);
+}
 
 
 int main(void) {

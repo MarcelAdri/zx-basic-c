@@ -7,6 +7,8 @@
 #include "execute.h"
 
 #include <stdio.h>
+#include <math.h>
+#include <time.h>
 
 #include "errors.h"
 #include "machine.h"
@@ -194,6 +196,45 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
 
     return ERR_0_OK;
 }
+static ZxError execute_cmd_randomize(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    int rng_state;
+    ZxError err;
+    if (output_size <= 1) {
+        rng_state = 0;
+    } else {
+        ZxValue value;
+        zx_init_value(&value);
+        size_t dummy_bytes_read;
+        err = solve_expression(machine, cmd + 1, output_size - 1, &value, &dummy_bytes_read);
+        if (err != ERR_0_OK) {
+            zx_free_string(&value);
+            return err;
+        }
+        if (value.type != ZX_TYPE_NUMBER) {
+            zx_free_string(&value);
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+        double value_number;
+        err = zx_get_number(value, &value_number);
+        if (err != ERR_0_OK) return err;
+
+        rng_state = (int)round(value_number);
+        zx_free_string(&value);
+
+
+        if (rng_state < 0 || rng_state > 65535) {
+            return ERR_B_INTEGER_OUT_OF_RANGE;
+        }
+    }
+    if (rng_state == 0) {
+        rng_state = (int)(machine_get_frames(machine) % 65536);
+        if (rng_state == 0) rng_state = 1;
+    }
+
+    machine_set_rng_state(machine, rng_state);
+
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_run(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     machine_clear_variables(machine);
 
@@ -295,6 +336,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_new(machine);
         case ZX_STATEMENT_PRINT:
             return execute_cmd_print(machine, input, input_size);
+        case ZX_STATEMENT_RANDOMIZE:
+            return execute_cmd_randomize(machine, input, input_size);
         case ZX_STATEMENT_RUN:
             return execute_cmd_run(machine, input, input_size);
         case ZX_STATEMENT_SAVE:

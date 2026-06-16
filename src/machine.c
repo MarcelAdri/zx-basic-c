@@ -60,6 +60,7 @@ typedef struct Machine {
     ZxPrintCallback print_callback;
 
     uint32_t rng_state;
+    uint32_t frame_counter;
 
 } Machine;
 
@@ -478,6 +479,7 @@ void machine_reset(ZxMachine machine) {
     machine->current_statement = 1;
     machine->current_edit_line = 0;
     machine_set_rng_state(machine, 12345);
+    machine->frame_counter = 0;
 
     //TODO: GOSUB stack
 }
@@ -628,4 +630,12 @@ void machine_print_to_system(ZxMachine machine, const char *text) {
         int x = i % 32;
         machine->system_screen[y][x] = text[i];
     }
+}
+uint32_t machine_get_frames(ZxMachine machine) {
+    if (machine == NULL) return 0;
+    return machine->frame_counter;
+}
+void machine_tick_frame(ZxMachine machine) {
+    if (machine == NULL) return;
+    machine->frame_counter++;
 }

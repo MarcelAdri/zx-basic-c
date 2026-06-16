@@ -596,6 +596,8 @@
             return;
         }
 
+        Module.ccall('UI_tick_frame', 'void', ['number'], [spectrumMachinePointer]);
+
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
         const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
 

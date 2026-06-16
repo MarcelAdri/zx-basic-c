@@ -83,5 +83,7 @@ void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback);
 void machine_print_value(ZxMachine machine, ZxValue value);
 const uint8_t* machine_get_system_screen(ZxMachine machine);
 void machine_print_to_system(ZxMachine machine, const char *text);
+uint32_t machine_get_frames(ZxMachine machine);
+void machine_tick_frame(ZxMachine machine);
 
 #endif //ZX_BASIC_C_MACHINE_H

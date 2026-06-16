@@ -85,5 +85,9 @@ const uint8_t* machine_get_system_screen(ZxMachine machine);
 void machine_print_to_system(ZxMachine machine, const char *text);
 uint32_t machine_get_frames(ZxMachine machine);
 void machine_tick_frame(ZxMachine machine);
+uint32_t machine_get_pause_start_frame(ZxMachine machine);
+void machine_set_pause_start_frame(ZxMachine machine, uint32_t frame);
+int machine_get_pause_length(ZxMachine machine);
+void machine_set_pause_length(ZxMachine machine, int length);
 
 #endif //ZX_BASIC_C_MACHINE_H

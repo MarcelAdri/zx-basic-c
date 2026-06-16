@@ -132,6 +132,42 @@ static ZxError execute_cmd_new(ZxMachine machine) {
     machine_reset(machine);
     return ERR_0_OK;
 }
+static ZxError execute_cmd_pause(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    if (machine_get_wait_reason(machine) != ZX_WAIT_NONE) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    ZxError err;
+    size_t dummy_bytes_read;
+    ZxValue argument;
+    zx_init_value(&argument);
+    err = solve_expression(machine, cmd + 1, output_size - 1, &argument, &dummy_bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&argument);
+        return err;
+    }
+    if (argument.type != ZX_TYPE_NUMBER) {
+        zx_free_string(&argument);
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    double argument_number;
+    err = zx_get_number(argument, &argument_number);
+    if (err != ERR_0_OK) {
+        zx_free_string(&argument);
+        return err;
+    }
+    int argument_int = (int)round(argument_number);
+    zx_free_string(&argument);
+
+    if (argument_int < 0 || argument_int > 65535) return ERR_B_INTEGER_OUT_OF_RANGE;
+
+    machine_set_wait_reason(machine, ZX_WAIT_PAUSE);
+    machine_set_pause_length(machine, argument_int);
+    machine_set_pause_start_frame(machine, machine_get_frames(machine));
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
         machine_next_line(machine);
@@ -334,6 +370,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                 return ERR_C_NONSENSE_IN_BASIC;
             }
             return execute_cmd_new(machine);
+        case ZX_STATEMENT_PAUSE:
+            return execute_cmd_pause(machine, input, input_size);
         case ZX_STATEMENT_PRINT:
             return execute_cmd_print(machine, input, input_size);
         case ZX_STATEMENT_RANDOMIZE:

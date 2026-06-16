@@ -170,8 +170,9 @@ void UI_resume(ZxMachine machine, uint8_t token) {
             break;
 
         case ZX_WAIT_INPUT:  // TODO
-        case ZX_WAIT_PAUSE:  // TODO
-            return;
+        case ZX_WAIT_PAUSE:
+            machine_set_wait_reason(machine, ZX_WAIT_NONE);
+            break;
     }
 }
 EMSCRIPTEN_KEEPALIVE
@@ -281,6 +282,7 @@ void run_basic_line(const uint8_t *buffer, size_t size, ZxMachine machine) {
     }
 
     if (line == 0) {
+        machine_print_to_system(machine, "");
         // 1. Het is een direct commando. Zet het in de speciale buffer.
         machine_set_direct_buffer(machine, buffer + i, size - i);
 

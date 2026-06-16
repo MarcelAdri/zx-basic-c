@@ -321,6 +321,15 @@
             return; // Blokkeer verdere invoer-afhandeling!
         }
 
+        if (waitReason === ZxWaitReason.PAUSE) {
+            event.preventDefault();
+
+            // Elke toets (Enter, Shift, letters, pijltjes) heft de pauze op!
+            Module.ccall('UI_resume', 'void', ['number', 'number'], [spectrumMachinePointer, 0]);
+
+            return;
+        }
+
         if (event.key === "Backspace") {
             inputBytes.pop();
             autoSetCursor();
@@ -352,6 +361,8 @@
             }
         }
     });
+
+
 
     function getFormattedLine(byteArray) {
         if (byteArray.length === 0) return "";

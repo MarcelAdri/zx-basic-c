@@ -31,6 +31,9 @@ typedef struct Machine {
     ZxWaitReason wait_reason;
     uint16_t wait_reason_resume_line;
 
+    uint32_t pause_start_frame;
+    int pause_length;
+
     uint8_t text_screen[22][32];
     uint8_t system_screen[2][32];
 
@@ -147,6 +150,12 @@ ZxError machine_delete_line(ZxMachine machine, const uint16_t line_number) {
         return ERR_UNKNOWN;
     }
     if (machine->program_memory[line_number].exists) {
+        size_t old_line_cost = machine->program_memory[line_number].length + 5;
+        if (machine->used_basic_ram >= old_line_cost) {
+            machine->used_basic_ram -= old_line_cost;
+        } else {
+            machine->used_basic_ram = 0; // Veiligheidsvangnet tegen onder de 0 gaan
+        }
         free(machine->program_memory[line_number].tokens);
         machine->program_memory[line_number].exists = false;
         machine->program_memory[line_number].length = 0;
@@ -445,7 +454,7 @@ void machine_clear_variables(ZxMachine machine) {
     }
     machine->numeric_vars = NULL;
     machine->numeric_variable_capacity = 0;
-    machine->used_basic_ram = 0;
+
 
     //TODO: Counter, arrays
 }
@@ -475,11 +484,14 @@ void machine_reset(ZxMachine machine) {
 
     machine_clear_variables(machine);
 
+    machine->used_basic_ram = 0;
     machine->current_line = 0;
     machine->current_statement = 1;
     machine->current_edit_line = 0;
     machine_set_rng_state(machine, 12345);
     machine->frame_counter = 0;
+    machine->pause_start_frame = 0;
+    machine->pause_length = -1;
 
     //TODO: GOSUB stack
 }
@@ -638,4 +650,35 @@ uint32_t machine_get_frames(ZxMachine machine) {
 void machine_tick_frame(ZxMachine machine) {
     if (machine == NULL) return;
     machine->frame_counter++;
+
+    if (machine_get_wait_reason(machine) == ZX_WAIT_PAUSE) {
+        uint32_t start_frame = machine_get_pause_start_frame(machine);
+        uint32_t current_frame = machine_get_frames(machine);
+        int pause_length = machine_get_pause_length(machine);
+        if (pause_length == -1 || pause_length == 0) {
+            return;
+        }
+        if ((current_frame - start_frame) >= pause_length) {
+            machine_set_wait_reason(machine, ZX_WAIT_NONE);
+            machine_set_pause_length(machine, -1);
+            machine_set_pause_start_frame(machine, 0);
+        }
+        return;
+    }
+}
+uint32_t machine_get_pause_start_frame(ZxMachine machine) {
+    if (machine == NULL) return 0;
+    return machine->pause_start_frame;
+}
+void machine_set_pause_start_frame(ZxMachine machine, uint32_t frame) {
+    if (machine == NULL) return;
+    machine->pause_start_frame = frame;
+}
+int machine_get_pause_length(ZxMachine machine) {
+    if (machine == NULL) return 0;
+    return machine->pause_length;
+}
+void machine_set_pause_length(ZxMachine machine, int length) {
+    if (machine == NULL) return;
+    machine->pause_length = length;
 }

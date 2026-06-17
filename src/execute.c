@@ -21,6 +21,38 @@ static ZxError execute_cmd_cls(ZxMachine machine) {
     machine_clear_text_screen(machine);
     return ERR_0_OK;
 }
+static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    ZxError err;
+    ZxValue line_number;
+    zx_init_value(&line_number);
+    size_t dummy_bytes_read;
+    err = solve_expression(machine, cmd + 1, output_size - 1, &line_number, &dummy_bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&line_number);
+        return err;
+    }
+    if (line_number.type != ZX_TYPE_NUMBER) {
+        zx_free_string(&line_number);
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    double line_number_value;
+    err = zx_get_number(line_number, &line_number_value);
+    if (err != ERR_0_OK) {
+        zx_free_string(&line_number);
+        return err;
+    }
+    if (line_number_value < 1 || line_number_value > 9999) {
+        zx_free_string(&line_number);
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
+    machine_set_current_line(machine, (uint16_t)line_number_value);
+    machine_set_current_statement(machine, 1);
+    zx_free_string(&line_number);
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     bool in_variable_name = true;
     bool in_expression = false;
@@ -359,6 +391,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                 return ERR_C_NONSENSE_IN_BASIC;
             }
             return execute_cmd_cls(machine);
+        case ZX_STATEMENT_GO_TO:
+            return execute_cmd_go_to(machine, input, input_size);
         case ZX_STATEMENT_LET:
             return execute_cmd_let(machine, input, input_size);
         case ZX_STATEMENT_LIST:
@@ -441,7 +475,12 @@ ZxError execute_single_step(ZxMachine machine) {
     ZxError err = execute(machine, chunk, chunk_size);
 
     // 6. De administratie: Schuif de pointer op voor de volgende ronde!
-    if (err == ERR_0_OK && chunk[0] != ZX_STATEMENT_RUN) {
+    if (err == ERR_0_OK &&
+        chunk[0] != ZX_STATEMENT_RUN &&
+        chunk[0] != ZX_STATEMENT_GO_TO &&
+        chunk[0] != ZX_STATEMENT_GO_SUB &&
+        chunk[0] != ZX_STATEMENT_RETURN)
+    {
         machine_set_current_statement(machine, current_statement + 1);
     }
 

@@ -40,6 +40,8 @@ typedef struct Machine {
     uint8_t text_cursor_x;
     uint8_t text_cursor_y;
 
+    uint8_t current_pressed_key;
+
     ZxLine program_memory[10000];
     uint16_t current_edit_line;
     uint16_t top_line_in_list;
@@ -484,6 +486,8 @@ void machine_reset(ZxMachine machine) {
 
     machine_clear_variables(machine);
 
+    machine->current_pressed_key = 0;
+
     machine->used_basic_ram = 0;
     machine->current_line = 0;
     machine->current_statement = 1;
@@ -681,4 +685,10 @@ int machine_get_pause_length(ZxMachine machine) {
 void machine_set_pause_length(ZxMachine machine, int length) {
     if (machine == NULL) return;
     machine->pause_length = length;
+}
+void machine_set_pressed_key(ZxMachine machine, const uint8_t token) {
+    if (machine) machine->current_pressed_key = token;
+}
+uint8_t machine_get_pressed_key(ZxMachine machine) {
+    return machine ? machine->current_pressed_key : 0;
 }

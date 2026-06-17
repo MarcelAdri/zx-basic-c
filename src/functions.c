@@ -191,6 +191,19 @@ static ZxError zx_function_exp(const ZxValue argument, ZxValue *result) {
 
     return zx_assign_number(exp(arg), result);
 }
+static ZxError zx_function_inkey_s(ZxMachine machine, ZxValue *result) {
+    uint8_t token = machine_get_pressed_key(machine);
+    const uint8_t *result_string;
+    size_t result_len;
+    if (token == 0) {
+        result_string = NULL;
+        result_len = 0;
+    } else {
+        result_string = &token;
+        result_len = 1;
+    }
+    return zx_assign_string(result_string, result_len, result);
+}
 static ZxError zx_function_int(const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -387,7 +400,7 @@ ZxError zx_function_call_no_arg(ZxMachine machine, const uint8_t function, ZxVal
 
     switch (function) {
         case ZX_FUN_INKEY_S:
-            return ERR_NOT_YET_IMPLEMENTED;
+            return zx_function_inkey_s(machine, result);
         case ZX_FUN_PI:
             return zx_function_pi(result);
         case ZX_FUN_RND:

@@ -397,7 +397,16 @@ EMSCRIPTEN_KEEPALIVE
 void UI_tick_frame(ZxMachine machine) {
     machine_tick_frame(machine);
 }
-
+EMSCRIPTEN_KEEPALIVE
+void UI_set_pressed_key(ZxMachine machine, uint8_t token) {
+    machine_set_pressed_key(machine, token);
+}
+EMSCRIPTEN_KEEPALIVE
+void UI_clear_pressed_key(ZxMachine machine, uint8_t token) {
+    if (machine_get_pressed_key(machine) == token) {
+        machine_set_pressed_key(machine, 0);
+    }
+}
 
 int main(void) {
     setlocale(LC_NUMERIC, "C");

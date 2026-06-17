@@ -322,9 +322,27 @@
         }
 
         if (waitReason === ZxWaitReason.PAUSE) {
-            event.preventDefault();
+            event.preventDefault(); // Voorkom dat de toets in de buffer typt
 
-            // Elke toets (Enter, Shift, letters, pijltjes) heft de pauze op!
+            // 1. Vertaal de toets eerst naar een Spectrum-token (net zoals we beneden doen)
+            let token = -1;
+            if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
+                token = Module.ccall(
+                    'UI_translate_keypress',
+                    'number',
+                    ['number', 'number'],
+                    [event.key.charCodeAt(0), 'L'.charCodeAt(0)] // Altijd 'L' modus voor INKEY$
+                );
+            } else if (event.key === "Enter") {
+                token = 13; // Enter is token 13 op de Spectrum
+            }
+
+            // 2. Als het een bekende Spectrum-toets is, meld hem direct aan als 'NU INGEDRUKT'
+            if (token !== -1) {
+                Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, token]);
+            }
+
+            // 3. Pas daarna mag de handrem eraf en start de batch weer!
             Module.ccall('UI_resume', 'void', ['number', 'number'], [spectrumMachinePointer, 0]);
 
             return;
@@ -353,12 +371,28 @@
 
             // GEEN JS-MAGIC MEER: We doen alleen iets als C het teken kent
             if (token !== -1) {
+                Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, token]);
                 // Voeg in OP de cursor positie, en schuif op!
                 inputBytes.splice(cursorPosition, 0, token);
                 cursorPosition++;
                 autoSetCursor();
                 updateDisplay();
             }
+        }
+    });
+
+    document.addEventListener("keyup", function(event) {
+        if (!spectrumMachinePointer) return;
+
+        const token = Module.ccall(
+            'UI_translate_keypress',
+            'number',
+            ['number', 'number'],
+            [event.key.charCodeAt(0), 'L'.charCodeAt(0)]
+        );
+
+        if (token !== -1) {
+            Module.ccall('UI_clear_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, token]);
         }
     });
 

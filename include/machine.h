@@ -89,5 +89,7 @@ uint32_t machine_get_pause_start_frame(ZxMachine machine);
 void machine_set_pause_start_frame(ZxMachine machine, uint32_t frame);
 int machine_get_pause_length(ZxMachine machine);
 void machine_set_pause_length(ZxMachine machine, int length);
+void machine_set_pressed_key(ZxMachine machine, uint8_t token);
+uint8_t machine_get_pressed_key(ZxMachine machine);
 
 #endif //ZX_BASIC_C_MACHINE_H

@@ -1821,6 +1821,8 @@ var _UI_deserialize_program = Module['_UI_deserialize_program'] = makeInvalidEar
 var _UI_move_cursor_up = Module['_UI_move_cursor_up'] = makeInvalidEarlyAccess('_UI_move_cursor_up');
 var _UI_move_cursor_down = Module['_UI_move_cursor_down'] = makeInvalidEarlyAccess('_UI_move_cursor_down');
 var _UI_tick_frame = Module['_UI_tick_frame'] = makeInvalidEarlyAccess('_UI_tick_frame');
+var _UI_set_pressed_key = Module['_UI_set_pressed_key'] = makeInvalidEarlyAccess('_UI_set_pressed_key');
+var _UI_clear_pressed_key = Module['_UI_clear_pressed_key'] = makeInvalidEarlyAccess('_UI_clear_pressed_key');
 var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
 var _fflush = makeInvalidEarlyAccess('_fflush');
 var _emscripten_stack_get_end = makeInvalidEarlyAccess('_emscripten_stack_get_end');
@@ -1857,6 +1859,8 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['UI_move_cursor_up'] != 'undefined', 'missing Wasm export: UI_move_cursor_up');
   assert(typeof wasmExports['UI_move_cursor_down'] != 'undefined', 'missing Wasm export: UI_move_cursor_down');
   assert(typeof wasmExports['UI_tick_frame'] != 'undefined', 'missing Wasm export: UI_tick_frame');
+  assert(typeof wasmExports['UI_set_pressed_key'] != 'undefined', 'missing Wasm export: UI_set_pressed_key');
+  assert(typeof wasmExports['UI_clear_pressed_key'] != 'undefined', 'missing Wasm export: UI_clear_pressed_key');
   assert(typeof wasmExports['main'] != 'undefined', 'missing Wasm export: main');
   assert(typeof wasmExports['fflush'] != 'undefined', 'missing Wasm export: fflush');
   assert(typeof wasmExports['emscripten_stack_get_end'] != 'undefined', 'missing Wasm export: emscripten_stack_get_end');
@@ -1890,6 +1894,8 @@ function assignWasmExports(wasmExports) {
   _UI_move_cursor_up = Module['_UI_move_cursor_up'] = createExportWrapper('UI_move_cursor_up', 1);
   _UI_move_cursor_down = Module['_UI_move_cursor_down'] = createExportWrapper('UI_move_cursor_down', 1);
   _UI_tick_frame = Module['_UI_tick_frame'] = createExportWrapper('UI_tick_frame', 1);
+  _UI_set_pressed_key = Module['_UI_set_pressed_key'] = createExportWrapper('UI_set_pressed_key', 2);
+  _UI_clear_pressed_key = Module['_UI_clear_pressed_key'] = createExportWrapper('UI_clear_pressed_key', 2);
   _main = Module['_main'] = createExportWrapper('main', 2);
   _fflush = createExportWrapper('fflush', 1);
   _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'];

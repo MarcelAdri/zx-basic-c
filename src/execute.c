@@ -50,6 +50,7 @@ static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t o
     }
     machine_set_current_line(machine, (uint16_t)line_number_value);
     machine_set_current_statement(machine, 1);
+    machine_set_state(machine, ZX_STATE_RUNNING);
     zx_free_string(&line_number);
     return ERR_0_OK;
 }
@@ -484,6 +485,12 @@ ZxError execute_single_step(ZxMachine machine) {
         chunk[0] != ZX_STATEMENT_RETURN)
     {
         machine_set_current_statement(machine, current_statement + 1);
+    }
+
+    uint8_t pressed_key = machine_get_pressed_key(machine);
+    if (is_zx_break(pressed_key)) {
+        machine_set_state(machine, ZX_STATE_IDLE);
+        err = ERR_L_BREAK_INTO_PROGRAM;
     }
 
     return err;

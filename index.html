@@ -222,6 +222,37 @@
     // --- 3. TOETSENBORD VANGER (Veilige Versie) ---
     document.addEventListener("keydown", function(event) {
         const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
+        const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
+
+        if (event.key === "Escape" || (event.shiftKey && event.key === " ")) {
+            event.preventDefault();
+
+            // Meld aan C dat er een BREAK-prikkel is!
+            Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, 27]);
+            return;
+        }
+        if (state === ZxState.RUNNING && waitReason === ZxWaitReason.NONE) {
+            event.preventDefault(); // Voorkom scrollen met spatie of andere browser-fratsen
+
+            let token = -1;
+            if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
+                token = Module.ccall(
+                    'UI_translate_keypress',
+                    'number',
+                    ['number', 'number'],
+                    [event.key.charCodeAt(0), 'L'.charCodeAt(0)] // Altijd 'L' modus voor INKEY$
+                );
+            } else if (event.key === "Enter") {
+                token = 13; // Enter kan ook door INKEY$ gelezen worden!
+            }
+
+            // Als C het token herkent, melden we hem aan voor INKEY$,
+            // maar we stoppen hem pertinent NIET in inputBytes!
+            if (token !== -1) {
+                Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, token]);
+            }
+            return; // CRUCIAAL: Breek hier direct af! De rest van de editor-code wordt overgeslagen.
+        }
         // --- DE EDIT TRIGGER (SHIFT + 1) ---
         if ((event.shiftKey && event.code === 'Digit1') || event.key === '!') {
             event.preventDefault();
@@ -384,10 +415,8 @@
     document.addEventListener("keyup", function(event) {
         if (!spectrumMachinePointer) return;
 
-        // Welke toets er ook wordt losgelaten: als het een letter, cijfer of spatie is,
-        // gooien we de actieve registratie in C gewoon direct dicht.
-        if (event.key.length === 1 || event.key === "Enter") {
-            // We omzeilen de vertaling en zetten de status direct op 0
+        // Als de letter of de Escape-toets wordt losgelaten, gooien we de status op 0
+        if (event.key.length === 1 || event.key === "Enter" || event.key === "Escape") {
             Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, 0]);
         }
     });

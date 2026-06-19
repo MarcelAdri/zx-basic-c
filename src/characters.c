@@ -9,6 +9,7 @@
 #include "machine.h"
 
 static const char *const ZX_CHARACTERS[256] = {
+    [27] = "ESC",
     [32] = " ",
     [33] = "!",
     [34] = "\"",
@@ -271,6 +272,7 @@ static const uint8_t KEYMAP_LITERAL_MODE[256] = {
     ['x'] = 120, ['X'] = 88,  // xX
     ['y'] = 121, ['Y'] = 89,  // yY
     ['z'] = 122, ['Z'] = 90,  // zZ
+    [27] = 27,                // ESC
     [' '] = 32,               // space
     ['!'] = 33,               // !
     ['\"'] = 34,              // "
@@ -540,40 +542,58 @@ ZxError build_zx_sentence (const uint8_t *characters, const size_t length, char 
 
 // C bepaalt de syntax-context!
 char get_expected_cursor_mode(const uint8_t *buffer, const size_t length) {
-    if (length == 0) return KEYMAP_MODE_KEYWORD; // Lege regel = Commando verwacht
+    if (length == 0) return KEYMAP_MODE_KEYWORD; // Volledig lege regel = Commando/Regelnummer verwacht
 
+    // 1. Controleer eerst op openstaande aanhalingstekens
     bool in_quotes = false;
-    uint8_t quote_token = get_token_from_key('"', KEYMAP_MODE_LITERAL); // Vaak byte 34
-
+    uint8_t quote_token = get_token_from_key('"', KEYMAP_MODE_LITERAL);
     for (size_t i = 0; i < length; i++) {
         if (buffer[i] == quote_token) {
-            in_quotes = !in_quotes; // Toggle de status bij elke quote die we zien
+            in_quotes = !in_quotes;
         }
     }
     if (in_quotes) {
-        return KEYMAP_MODE_LITERAL;
+        return KEYMAP_MODE_LITERAL; // Binnen strings altijd letterlijke invoer
     }
-    uint8_t last_byte = buffer[length - 1];
 
-    // Na een dubbele punt of THEN komt er altijd een commando
-    // (Gebruik hier straks je mooie #define namen zoals TOKEN_THEN in plaats van 203!)
-    if (last_byte == 58 || last_byte == 203) {
+    // 2. Bepaal de "effectieve lengte" door alle trailing spaties aan het einde te tellen
+    size_t trailing_spaces = 0;
+    while (trailing_spaces < length && buffer[length - 1 - trailing_spaces] == 32) {
+        trailing_spaces++;
+    }
+
+    // FIX 1: Als de regel UITSLUITEND uit spaties bestaat (een eenzame of meerdere),
+    // dan verwachten we nog steeds een commando of regelnummer!
+    if (trailing_spaces == length) {
         return KEYMAP_MODE_KEYWORD;
     }
 
-    // Regelnummer logica: zijn we geëindigd met een spatie en waren het daarvoor alleen cijfers?
-    if (last_byte == 32 && length > 1) {
-        int is_line_number = 1;
-        for (size_t i = 0; i < length - 1; i++) {
-            if (buffer[i] < 48 || buffer[i] > 57) { // ASCII 0-9
-                is_line_number = 0;
+    // Bereken het einde van de tekst zónder de trailing spaties
+    size_t effective_length = length - trailing_spaces;
+    uint8_t last_meaningful_byte = buffer[effective_length - 1];
+
+    // Na een dubbele punt (58) of THEN (203) komt er altijd weer een keyword
+    if (last_meaningful_byte == 58 || last_meaningful_byte == 203) {
+        return KEYMAP_MODE_KEYWORD;
+    }
+
+    // FIX 2: Verbeterde Regelnummer-logica
+    // Als er minstens één spatie is getypt (trailing_spaces > 0), én alles daavóór
+    // (de effectieve lengte) bestaat puur uit cijfers, dan zijn we klaar met het regelnummer!
+    if (trailing_spaces > 0) {
+        bool is_line_number = true;
+        for (size_t i = 0; i < effective_length; i++) {
+            if (buffer[i] < 48 || buffer[i] > 57) { // Geen ASCII cijfer 0-9
+                is_line_number = false;
                 break;
             }
         }
-        if (is_line_number) return KEYMAP_MODE_KEYWORD;
+        if (is_line_number) {
+            return KEYMAP_MODE_KEYWORD;
+        }
     }
 
-    return KEYMAP_MODE_LITERAL; // In alle andere gevallen: gewone letters
+    return KEYMAP_MODE_LITERAL; // In alle andere gevallen (midden in expressies): letters
 }
 
 bool is_zx_printable_character(const uint8_t c) {
@@ -602,6 +622,12 @@ bool is_zx_alnum(const uint8_t c) {
 }
 bool is_zx_space(const uint8_t c) {
     if (c == 32) {
+        return true;
+    }
+    return false;
+}
+bool is_zx_break(const uint8_t c) {
+    if (c == 27) {
         return true;
     }
     return false;

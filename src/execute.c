@@ -410,6 +410,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_print(machine, input, input_size);
         case ZX_STATEMENT_RANDOMIZE:
             return execute_cmd_randomize(machine, input, input_size);
+        case ZX_STATEMENT_REM:
+            return ERR_0_OK;
         case ZX_STATEMENT_RUN:
             return execute_cmd_run(machine, input, input_size);
         case ZX_STATEMENT_SAVE:

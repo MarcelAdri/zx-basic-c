@@ -487,6 +487,17 @@ void extract_statement(const uint8_t *line_buffer, size_t line_size, uint8_t tar
             in_quotes = !in_quotes;
         }
 
+        if (line_buffer[i] == ZX_STATEMENT_REM && !in_quotes) {
+            if (current_stmt_idx == target_statement) {
+                *chunk = line_buffer + current_start;
+                *chunk_size = line_size - current_start;
+            } else {
+                *chunk = NULL;
+                *chunk_size = 0;
+            }
+            return;
+        }
+
         // We zoeken naar de dubbele punt ':' (als we niet in een string zitten!)
         if (is_zx_colon(line_buffer[i]) && !in_quotes) {
 

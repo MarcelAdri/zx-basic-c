@@ -456,6 +456,7 @@ void machine_clear_variables(ZxMachine machine) {
     }
     machine->numeric_vars = NULL;
     machine->numeric_variable_capacity = 0;
+    machine->current_pressed_key = 0;
 
 
     //TODO: Counter, arrays

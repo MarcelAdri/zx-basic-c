@@ -8,7 +8,6 @@
 #include "zx_types.h"
 #include <stdbool.h>
 
-#define MAX_VAR_NAME_LEN 100
 #define MAX_TEXT_SENTENCE_LEN 256
 #define MAX_TOKEN_SENTENCE_LEN 200
 
@@ -35,10 +34,6 @@ typedef enum {
 } ZxWaitReason;
 
 ZxMachine machine_create(void);
-ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value);
-ZxError machine_get_numeric(ZxMachine machine, const char *var_name, ZxValue *value);
-ZxError machine_set_string(ZxMachine machine, uint8_t var_name, ZxValue *value);
-ZxError machine_get_string(ZxMachine machine, uint8_t var_name, ZxValue *value);
 uint8_t machine_get_text_cursor_x(ZxMachine machine);
 uint8_t machine_get_text_cursor_y(ZxMachine machine);
 void machine_set_text_cursor_x(ZxMachine machine, uint8_t x);
@@ -91,5 +86,7 @@ int machine_get_pause_length(ZxMachine machine);
 void machine_set_pause_length(ZxMachine machine, int length);
 void machine_set_pressed_key(ZxMachine machine, uint8_t token);
 uint8_t machine_get_pressed_key(ZxMachine machine);
+ZxError machine_get_variable(ZxMachine machine, const char *var_name, const uint16_t *indices, uint8_t num_indices_passed, int32_t desired_len, ZxValue *value);
+ZxError machine_set_variable(ZxMachine machine, const char *var_name, const uint16_t *indices, uint8_t num_indices_passed, int32_t desired_len, ZxValue value);
 
 #endif //ZX_BASIC_C_MACHINE_H

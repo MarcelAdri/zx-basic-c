@@ -19,10 +19,7 @@
 #define ZX_MAX_BASIC_RAM 41500
 
 
-typedef struct {
-    char name[MAX_VAR_NAME_LEN];       // We reserveren max. 99 tekens voor de naam (+ '\0')
-    ZxValue value;
-} NumericVariable;
+
 
 
 
@@ -56,7 +53,8 @@ typedef struct Machine {
     uint8_t direct_buffer[2048];
     size_t direct_length;
 
-    ZxValue string_variables[26];
+    ZxStringSlot string_variables[26];
+    ZxNumericArray numeric_arrays[26];
 
     NumericVariable *numeric_vars;
     int numeric_variable_count;
@@ -95,6 +93,32 @@ static int get_numeric_variable_index(ZxMachine machine, const char *var_name, c
         }
     }
     return NOT_FOUND;
+}
+static NumericVariable* find_or_create_numeric_variable(ZxMachine machine, const char *name) {
+    // 1. Bestaat hij al?
+    int i = get_numeric_variable_index(machine, name, MAX_VAR_NAME_LEN);
+    if (i != NOT_FOUND) {
+        return &machine->numeric_vars[i];
+    }
+
+    // 2. Nee? Check capaciteit en groei indien nodig
+    if (machine->numeric_variable_count >= machine->numeric_variable_capacity) {
+        size_t new_capacity = (machine->numeric_variable_capacity == 0) ? 4 : (machine->numeric_variable_capacity * 2);
+        NumericVariable* new_array = realloc(machine->numeric_vars, new_capacity * sizeof(NumericVariable));
+        if (new_array == NULL) return NULL;
+
+        machine->numeric_vars = new_array;
+        machine->numeric_variable_capacity = new_capacity;
+    }
+
+    // 3. Initialiseer de nieuwe variabele
+    int nieuw_index = machine->numeric_variable_count;
+    strncpy(machine->numeric_vars[nieuw_index].name, name, MAX_VAR_NAME_LEN - 1);
+    machine->numeric_vars[nieuw_index].name[MAX_VAR_NAME_LEN - 1] = '\0';
+    machine->numeric_vars[nieuw_index].value = 0.0; // Veilige default
+
+    machine->numeric_variable_count++;
+    return &machine->numeric_vars[nieuw_index];
 }
 ZxMachine machine_create(void) {
     Machine* machine = malloc(sizeof(Machine));
@@ -335,109 +359,8 @@ ZxLine* machine_get_program(ZxMachine machine) {
     }
     return machine->program_memory;
 }
-ZxError machine_set_numeric(ZxMachine machine, const char *var_name, ZxValue value) {
-    if (machine == NULL || var_name == NULL) {
-        return ERR_UNKNOWN;
-    }
-    if (value.type != ZX_TYPE_NUMBER) {
-        return ERR_C_NONSENSE_IN_BASIC;
-    }
-    int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
-    if (i != NOT_FOUND) {
-        return zx_assign_number(value.data.number, &machine->numeric_vars[i].value);
-    }
 
-    if (machine->numeric_variable_count >= machine->numeric_variable_capacity) {
 
-        size_t new_capacity = (machine->numeric_variable_capacity == 0) ? 4 : (machine->numeric_variable_capacity * 2);
-
-        NumericVariable* new_array = realloc(machine->numeric_vars, new_capacity * sizeof(NumericVariable));
-
-        if (new_array == NULL) {
-            return ERR_4_OUT_OF_MEMORY;
-        }
-
-        machine->numeric_vars = new_array;
-        machine->numeric_variable_capacity = new_capacity;
-    }
-    const int nieuw_index = machine->numeric_variable_count;
-
-    strncpy(machine->numeric_vars[nieuw_index].name, var_name, MAX_VAR_NAME_LEN - 1);
-    machine->numeric_vars[nieuw_index].name[MAX_VAR_NAME_LEN - 1] = '\0';
-    zx_init_value(&machine->numeric_vars[nieuw_index].value);
-
-    ZxError err = zx_assign_number(value.data.number, &machine->numeric_vars[nieuw_index].value);
-
-    if (err == ERR_0_OK) {
-        machine->numeric_variable_count++;
-    }
-
-    return err;
-}
-
-ZxError machine_get_numeric(ZxMachine machine, const char *var_name, ZxValue *value) {
-    if (machine == NULL || var_name == NULL || value == NULL) {
-        return ERR_UNKNOWN;
-    }
-
-    int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
-    if (i != NOT_FOUND) {
-
-        if (machine->numeric_vars[i].value.type != ZX_TYPE_NUMBER) {
-            return ERR_C_NONSENSE_IN_BASIC;
-        }
-
-        return zx_assign_number(machine->numeric_vars[i].value.data.number, value);
-    }
-    return ERR_2_VARIABLE_NOT_FOUND;
-}
-ZxError machine_set_string(ZxMachine machine, const uint8_t var_name, ZxValue *value) {
-    if (machine == NULL || value == NULL) {
-        return ERR_UNKNOWN;
-    }
-
-    int i = name_to_index(var_name);
-    if (i == NOT_FOUND) {
-        return ERR_F_INVALID_FILENAME;
-    }
-    if (value->type != ZX_TYPE_STRING) {
-        return ERR_C_NONSENSE_IN_BASIC;
-    }
-
-    ZxValue *slot = &machine->string_variables[i];
-    zx_free_string(slot);
-
-    uint8_t *parser_text = NULL;
-    size_t text_len = 0;
-    zx_get_string(*value, &parser_text, &text_len);
-
-    uint8_t *machine_text = malloc(text_len);
-    if (machine_text == NULL && text_len > 0) {
-        return ERR_4_OUT_OF_MEMORY;
-    }
-    if (text_len > 0) {
-        memcpy(machine_text, parser_text, text_len);
-    }
-    return zx_assign_string(machine_text, text_len, slot);
-}
-ZxError machine_get_string(ZxMachine machine, const uint8_t var_name, ZxValue *value) {
-    if (machine == NULL || value == NULL) {
-        return ERR_UNKNOWN;
-    }
-
-    int i = name_to_index(var_name);
-
-    if (i != NOT_FOUND) {
-        zx_assign_string(machine->string_variables[i].data.string.text,
-                 machine->string_variables[i].data.string.length,
-                 value);
-        if (value->type != ZX_TYPE_STRING) {
-            return ERR_2_VARIABLE_NOT_FOUND;
-        }
-        return ERR_0_OK;
-    }
-    return ERR_2_VARIABLE_NOT_FOUND;
-}
 void machine_set_rng_state(ZxMachine machine, uint32_t state) {
     if (machine != NULL) {
         machine->rng_state = state;
@@ -458,8 +381,13 @@ void machine_clear_variables(ZxMachine machine) {
     machine->numeric_variable_capacity = 0;
     machine->current_pressed_key = 0;
 
+    for (int i = 0; i < 26; i++) {
+        zx_free_numeric_array(&machine->numeric_arrays[i]);
+        zx_free_string_slot(&machine->string_variables[i]);
+    }
 
-    //TODO: Counter, arrays
+
+    //TODO: Counter
 }
 void machine_reset(ZxMachine machine) {
     if (machine == NULL) return;
@@ -692,4 +620,91 @@ void machine_set_pressed_key(ZxMachine machine, const uint8_t token) {
 }
 uint8_t machine_get_pressed_key(ZxMachine machine) {
     return machine ? machine->current_pressed_key : 0;
+}
+//Variable getter en setter
+ZxError machine_get_variable(ZxMachine machine, const char *var_name, const uint16_t *indices, const uint8_t num_indices_passed, const int32_t desired_len, ZxValue *value) {
+    if (machine == NULL || var_name == NULL || value == NULL) {
+        return ERR_UNKNOWN;
+    }
+    //1. string variabelen
+    if (strlen(var_name) == 2 && var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+        int i = name_to_index((uint8_t)var_name[0]);
+        if (i == NOT_FOUND) return ERR_2_VARIABLE_NOT_FOUND;
+        if (!machine->string_variables[i].exists) return ERR_2_VARIABLE_NOT_FOUND;
+        return zx_get_string_element(&machine->string_variables[i], indices, num_indices_passed, desired_len, value);
+    }
+
+    //2. numerieke variabelen
+    //2a. enkele variabele
+    if (num_indices_passed == 0) {
+        int i = get_numeric_variable_index(machine, var_name, MAX_VAR_NAME_LEN);
+        if (i != NOT_FOUND) {
+            return zx_get_numeric_value(&machine->numeric_vars[i], value);
+        }
+
+        return ERR_2_VARIABLE_NOT_FOUND;
+    }
+    //2b. array-element
+    if (strlen(var_name) != 1) return ERR_C_NONSENSE_IN_BASIC;
+    int i = name_to_index((uint8_t)var_name[0]);
+    if (i == NOT_FOUND) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+    ZxNumericArray *array = &machine->numeric_arrays[i];
+
+    if (!array->exists) return ERR_2_VARIABLE_NOT_FOUND;
+
+    return zx_get_numeric_array_element(array, indices, num_indices_passed, value);
+
+}
+ZxError machine_set_variable(ZxMachine machine, const char *var_name, const uint16_t *indices, const uint8_t num_indices_passed, const int32_t desired_len, const ZxValue value) {
+    if (machine == NULL || var_name == NULL) return ERR_UNKNOWN;
+
+    // =========================================================================
+    // 1. DOEL IS EEN STRING VARIABELE OF STRING ARRAY (bijv. "a$")
+    // =========================================================================
+    if (strlen(var_name) == 2 && var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+
+        if (value.type != ZX_TYPE_STRING) {
+            return ERR_C_NONSENSE_IN_BASIC; // Sinclair type mismatch
+        }
+
+        int i = name_to_index((uint8_t)var_name[0]);
+        if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
+
+        return zx_set_string_element(&machine->string_variables[i], indices, num_indices_passed, desired_len, value);
+    }
+
+    // =========================================================================
+    // NUMERIEKE LOGICA (Vanaf hier weten we zeker dat het doel een getal/getallen-array is)
+    // =========================================================================
+    // TYPE CHECK: Als je naar een numeriek doel schrijft, MOET de waarde een getal zijn!
+    if (value.type != ZX_TYPE_NUMBER) {
+        return ERR_C_NONSENSE_IN_BASIC; // Sinclair type mismatch
+    }
+
+    // =========================================================================
+    // 2. DOEL IS EEN GEWONE NUMERIEKE SCALAR (bijv. "LET snelheid = 10")
+    // =========================================================================
+    if (num_indices_passed == 0) {
+        // We delegeren het zoeken of aanmaken naar een interne machine-helper!
+        NumericVariable *var = find_or_create_numeric_variable(machine, var_name);
+        if (var == NULL) return ERR_4_OUT_OF_MEMORY;
+
+        return zx_set_numeric_value(var, value);
+    }
+
+    // =========================================================================
+    // 3. DOEL IS EEN NUMERIEKE ARRAY (bijv. "LET a(1,2) = 10")
+    // =========================================================================
+    if (strlen(var_name) != 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    int i = name_to_index((uint8_t)var_name[0]);
+    if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
+
+    ZxNumericArray *array = &machine->numeric_arrays[i];
+    if (!array->exists) return ERR_2_VARIABLE_NOT_FOUND;
+
+    return zx_set_numeric_array_element(array, indices, num_indices_passed, value);
 }

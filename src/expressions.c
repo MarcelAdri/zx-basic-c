@@ -18,12 +18,7 @@
 #include "machine.h"
 #include "helpers.h"
 
-typedef struct {
-    ZxMachine machine;
-    const uint8_t *buffer;
-    size_t size;
-    size_t cursor;
-} ParserContext;
+
 
 static ZxError parse_expression(ParserContext *ctx, ZxValue *out_value);
 static ZxError parse_logical_and(ParserContext *ctx, ZxValue *out_value);
@@ -64,7 +59,6 @@ static ZxError zx_compare_strings(int *result, const ZxValue *left, const ZxValu
     if (left_len == right_len) *result = 0;
     return ERR_0_OK;
 }
-
 static ZxError zx_calculate(uint8_t operator, ZxValue *left, ZxValue *right) {
     if (left == NULL || right == NULL) return ERR_UNKNOWN;
     ZxError err;
@@ -153,6 +147,172 @@ static void zx_skip_spaces(ParserContext *ctx) {
         ctx->cursor++;
     }
 }
+static ZxError parse_array_index_string(ParserContext *ctx, uint16_t *indices, uint8_t *num_indices_passed, int32_t *desired_len) {
+    if (ctx == NULL || indices == NULL || num_indices_passed == NULL || desired_len == NULL) {
+        return ERR_UNKNOWN;
+    }
+
+    ZxError err;
+    size_t index_counter = 0;
+    *desired_len = SLICE_NO_TO;
+
+    while (ctx->cursor < ctx->size) {
+        zx_skip_spaces(ctx);
+
+        // =========================================================================
+        // KRONKEL 1: Directe 'TO' bij de start van een dimensie (bijv. A$( TO 5) of A$(2, TO 5))
+        // =========================================================================
+        if (ctx->buffer[ctx->cursor] == ZX_TOKEN_TO) {
+            uint16_t begin = 1; // Slicen zonder startwaarde begint altijd op karakter 1
+            if (index_counter > 10) return ERR_3_SUBSCRIPT_WRONG;
+            indices[index_counter++] = begin;
+
+            ctx->cursor++; // Skip 'TO'
+            zx_skip_spaces(ctx);
+
+            // Als er nóg een expressie achter TO staat (bijv. TO 5)
+            if (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+                ZxValue eind;
+                zx_init_value(&eind);
+                err = parse_expression(ctx, &eind);
+                if (err != ERR_0_OK) { zx_free_string(&eind); return err; }
+
+                double tmp_eind;
+                err = zx_get_number(eind, &tmp_eind);
+                zx_free_string(&eind);
+                if (err != ERR_0_OK) return err;
+
+                // Sinclair-beveiliging: als het einde vóór het begin ligt, is de lengte gewoon 0
+                *desired_len = (tmp_eind < begin) ? 0 : ((int32_t)tmp_eind - begin + 1);
+            } else {
+                *desired_len = SLICE_OPEN_TO; // Geval: A$(4 TO ) -> Slicen tot het absolute einde
+            }
+
+            *num_indices_passed = index_counter;
+            return ERR_0_OK; // Slicing is ALTIJD de afsluiter van een string-opvraging!
+        }
+
+        // =========================================================================
+        // NORMALE INDEX VERWERKING (Los de numerieke expressie op)
+        // =========================================================================
+        ZxValue index_val;
+        zx_init_value(&index_val);
+        err = parse_expression(ctx, &index_val);
+        if (err != ERR_0_OK) { zx_free_string(&index_val); return err; }
+
+        double index_num;
+        err = zx_get_number(index_val, &index_num);
+        zx_free_string(&index_val);
+        if (err != ERR_0_OK) return err;
+
+        uint16_t parsed_idx = (uint16_t)index_num;
+        if (index_counter > 10) return ERR_3_SUBSCRIPT_WRONG;
+        indices[index_counter++] = parsed_idx;
+
+        zx_skip_spaces(ctx);
+        if (ctx->cursor >= ctx->size) return ERR_C_NONSENSE_IN_BASIC;
+
+        // =========================================================================
+        // DE VALSTRIK-KLEP: Inspecteer direct de syntactische opvolger
+        // =========================================================================
+        uint8_t next_token = ctx->buffer[ctx->cursor];
+
+        if (next_token == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+            ctx->cursor++; // Skip de komma en ga vrolijk door naar de volgende dimensie
+            continue;
+        }
+
+        if (next_token == ZX_TOKEN_TO) {
+            ctx->cursor++; // Skip 'TO'
+            zx_skip_spaces(ctx);
+
+            // Als er een eindwaarde is opgegeven (bijv. 4 TO 6)
+            if (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+                ZxValue eind;
+                zx_init_value(&eind);
+                err = parse_expression(ctx, &eind);
+                if (err != ERR_0_OK) { zx_free_string(&eind); return err; }
+
+                double tmp_eind;
+                err = zx_get_number(eind, &tmp_eind);
+                zx_free_string(&eind);
+                if (err != ERR_0_OK) return err;
+
+                *desired_len = (tmp_eind < parsed_idx) ? 0 : ((int32_t)tmp_eind - parsed_idx + 1);
+            } else {
+                *desired_len = SLICE_OPEN_TO; // Geval: A$(2, 4 TO )
+            }
+
+            *num_indices_passed = index_counter;
+            return ERR_0_OK; // Klaar!
+        }
+
+        if (next_token == get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+            // We zijn op de sluitende haak gestuit zonder slicer (bijv. A$(2, 3) of A$(2))
+            *num_indices_passed = index_counter;
+            return ERR_0_OK; // parse_factor consumeert de ')' straks netjes
+        }
+
+        // Als er na een expressie géén komma, TO of sluithaak staat, is het pure wartaal!
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+    return ERR_C_NONSENSE_IN_BASIC;
+}
+static ZxError parse_array_index_numeric(ParserContext *ctx, uint16_t *indices, uint8_t *num_indices_passed) {
+    if (ctx == NULL || indices == NULL || num_indices_passed == NULL) {
+        return ERR_UNKNOWN;
+    }
+
+    ZxError err;
+    size_t index_counter = 0;
+
+    while (ctx->cursor < ctx->size) {
+        zx_skip_spaces(ctx);
+
+        // =========================================================================
+        // NORMALE INDEX VERWERKING (Los de numerieke expressie op)
+        // =========================================================================
+        ZxValue index_val;
+        zx_init_value(&index_val);
+        err = parse_expression(ctx, &index_val);
+        if (err != ERR_0_OK) { zx_free_string(&index_val); return err; }
+
+        double index_num;
+        err = zx_get_number(index_val, &index_num);
+        zx_free_string(&index_val);
+        if (err != ERR_0_OK) return err;
+
+        uint16_t parsed_idx = (uint16_t)index_num;
+        if (index_counter > 10) return ERR_3_SUBSCRIPT_WRONG;
+        indices[index_counter++] = parsed_idx;
+
+        zx_skip_spaces(ctx);
+        if (ctx->cursor >= ctx->size) return ERR_C_NONSENSE_IN_BASIC;
+
+        // =========================================================================
+        // DE VALSTRIK-KLEP: Inspecteer direct de syntactische opvolger
+        // =========================================================================
+        uint8_t next_token = ctx->buffer[ctx->cursor];
+
+        if (next_token == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+            ctx->cursor++; // Skip de komma en ga vrolijk door naar de volgende dimensie
+            continue;
+        }
+
+        if (next_token == get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+
+            *num_indices_passed = index_counter;
+            return ERR_0_OK; // parse_factor consumeert de ')' straks netjes
+        }
+
+        // Als er na een expressie géén komma of sluithaak staat, is het pure wartaal!
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+    return ERR_C_NONSENSE_IN_BASIC;
+}
+
 static ZxError parse_expression(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
@@ -556,17 +716,29 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
         return ERR_0_OK;
     }
     if (is_zx_alpha(token)) {
-        char variable_name[MAX_VAR_NAME_LEN];
+        ZxError err;
         size_t bytes_read;
-        err = parse_variable_name(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, variable_name, &bytes_read);
+        char variable_name[MAX_VAR_NAME_LEN];
+        uint16_t indices[10] = {0};
+        uint8_t num_indices_passed = 0;
+        int32_t desired_len = 0;
+
+        err = zx_parse_variable_reference(ctx->machine,
+            ctx->buffer + ctx->cursor,
+            ctx->size - ctx->cursor,
+            &bytes_read,
+            variable_name,
+            indices,
+            &num_indices_passed,
+            &desired_len);
         if (err != ERR_0_OK) goto error_cleanup;
+
         ctx->cursor += bytes_read;
         zx_skip_spaces(ctx);
-        if (strlen(variable_name) == 2 && variable_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
-            return machine_get_string(ctx->machine, variable_name[0], out_value);
-        }
-        return machine_get_numeric(ctx->machine, variable_name, out_value);
+
+        return machine_get_variable(ctx->machine, variable_name, indices, num_indices_passed, desired_len, out_value);
     }
+
     if (token == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
         size_t bytes_read;
         err = parse_string_literal(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, out_value, &bytes_read);
@@ -606,4 +778,55 @@ ZxError solve_expression(ZxMachine machine, const uint8_t *expression, size_t ex
     *bytes_read = ctx.cursor;
     return ERR_0_OK;
 }
+ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, size_t size, size_t *bytes_read, char *out_var_name, uint16_t *out_indices, uint8_t *out_num_indices, int32_t *out_desired_len) {
+    if (buffer == NULL || bytes_read == NULL || out_var_name == NULL) return ERR_UNKNOWN;
 
+    // Sla de interne brug: maak een tijdelijke context aan voor de interne lussen
+    ParserContext ctx;
+    ctx.machine = machine;
+    ctx.buffer = buffer;
+    ctx.size = size;
+    ctx.cursor = 0;
+
+    // 1. Parse de naam (gebruik je bestaande interne functie)
+    size_t name_bytes;
+    ZxError err = parse_variable_name(ctx.buffer, ctx.size, out_var_name, &name_bytes);
+    if (err != ERR_0_OK) return err;
+    ctx.cursor += name_bytes;
+    zx_skip_spaces(&ctx);
+
+    // 2. Indien van toepassing: parse de indices via de interne helpers
+    if (strlen(out_var_name) == 2 && out_var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+        // String of String-array
+        if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+            ctx.cursor++; // Skip '('
+            zx_skip_spaces(&ctx);
+
+            err = parse_array_index_string(&ctx, out_indices, out_num_indices, out_desired_len);
+            if (err != ERR_0_OK) return err;
+
+            if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+                return ERR_C_NONSENSE_IN_BASIC;
+            }
+            ctx.cursor++; // Skip ')'
+        }
+    } else if (strlen(out_var_name) == 1) {
+        // Numerieke array
+        if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+            ctx.cursor++; // Skip '('
+            zx_skip_spaces(&ctx);
+
+            err = parse_array_index_numeric(&ctx, out_indices, out_num_indices);
+            if (err != ERR_0_OK) return err;
+
+            if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+                return ERR_C_NONSENSE_IN_BASIC;
+            }
+            ctx.cursor++; // Skip ')'
+        }
+    }
+
+    // Vertel de beller exact hoever we in het rauwe buffer zijn doorgeschoven!
+    *bytes_read = ctx.cursor;
+    return ERR_0_OK;
+}

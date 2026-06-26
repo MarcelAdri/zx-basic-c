@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(zx_basic_c VERSION 0.5.5 LANGUAGES C)
+project(zx_basic_c VERSION 0.5.6 LANGUAGES C)
 
 # Vertel CMake dat hij een gegenereerd headerbestand moet maken
 # op basis van onze template 'version.h.in'

@@ -20,6 +20,7 @@
 #include "errors.h"
 #include "machine.h"
 #include "execute.h"
+#include "expressions.h"
 
 ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic) {
     if (machine == NULL) return ERR_UNKNOWN;
@@ -526,3 +527,13 @@ void extract_statement(const uint8_t *line_buffer, size_t line_size, uint8_t tar
     *chunk = NULL;
     *chunk_size = 0;
 }
+size_t calculate_flat_index(uint16_t *dim_sizes, const uint8_t num_dims, const uint16_t *parsed_indices) {
+    if (dim_sizes == NULL || num_dims == 0 || parsed_indices == NULL) return 0;
+    size_t flat_index = 0;
+    for (uint8_t i = 0; i < num_dims; i++) {
+        int idx = parsed_indices[i] - 1; // Maak 0-based
+        flat_index = flat_index * dim_sizes[i] + idx;
+    }
+    return flat_index;
+}
+

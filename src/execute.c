@@ -55,65 +55,50 @@ static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t o
     return ERR_0_OK;
 }
 static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
-    bool in_variable_name = true;
-    bool in_expression = false;
-    uint8_t variable_name[MAX_VAR_NAME_LEN] = {0};
-    uint8_t expr[256] = {0};
-    char var_name[MAX_VAR_NAME_LEN];
-    ZxError err;
-    size_t name_size = 0;
-    size_t expr_size = 0;
-    for (size_t i = 1; i < output_size; i++) {
-        if (in_variable_name && name_size < MAX_VAR_NAME_LEN - 1) {
-            if (cmd[i] == get_token_from_key('=', KEYMAP_MODE_LITERAL)) {
-                in_variable_name = false;
-                in_expression = true;
-                size_t dummy_bytes_read;
-                err = parse_variable_name(variable_name, name_size, var_name, &dummy_bytes_read);
-                if (err != ERR_0_OK) {
-                    return err;
-                }
-                continue;
-            }
-            if (is_zx_alnum(cmd[i]) || is_zx_space(cmd[i]) || cmd[i] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
-                variable_name[name_size] = cmd[i];
-                name_size++;
-                continue;
-            }
-            return ERR_2_VARIABLE_NOT_FOUND;
-        }
-        if (in_expression && expr_size < sizeof(expr) - 1) {
-            expr[expr_size] = cmd[i];
-            expr_size++;
-        }
-    }
-    if (in_variable_name) {
-        return ERR_2_VARIABLE_NOT_FOUND;
-    }
-    size_t bytes_read;
-    ZxValue result;
-    zx_init_value(&result);
-    err = solve_expression(machine,
-        expr, expr_size, &result, &bytes_read);
-    if (err != ERR_0_OK) {
-        zx_free_string(&result);
-        return err;
-    }
-    if (var_name[1] == '$') {
-        if (result.type != ZX_TYPE_STRING) {
-            zx_free_string(&result);
-            return ERR_C_NONSENSE_IN_BASIC;
-        }
-        err = machine_set_string(machine, var_name[0], &result);
-        zx_free_string(&result);
-        return err;
-    }
-    if (result.type != ZX_TYPE_NUMBER) {
-        zx_free_string(&result);
+    if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    // 1. Stack-allocatie voor de Poortwachter
+    char var_name[MAX_VAR_NAME_LEN] = {0};
+    uint16_t indices[10] = {0};
+    uint8_t num_indices = 0;
+    int32_t desired_len = 0;
+    size_t bytes_read_lhs = 0;
+
+    // Start direct ná het LET-token (cmd + 1)
+    ZxError err = zx_parse_variable_reference(
+        machine, cmd + 1, output_size - 1, &bytes_read_lhs,
+        var_name, indices, &num_indices, &desired_len
+    );
+    if (err != ERR_0_OK) return err;
+
+    // Cursor verplaatsen naar het token ná de variabele-referentie
+    size_t cursor = 1 + bytes_read_lhs;
+
+    // Eventuele spaties skippen om bij de '=' te komen
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+
+    // 2. Controleer op de aanwezigheid van de '='
+    if (cursor >= output_size || cmd[cursor] != get_token_from_key('=', KEYMAP_MODE_LITERAL)) {
         return ERR_C_NONSENSE_IN_BASIC;
     }
-    err = machine_set_numeric(machine, var_name, result);
-    zx_free_string(&result);
+    cursor++; // Consumeer de '='
+
+    // 3. Los de rechterkant op (RHS)
+    ZxValue rhs_value;
+    zx_init_value(&rhs_value);
+    size_t bytes_read_rhs = 0;
+
+    err = solve_expression(machine, cmd + cursor, output_size - cursor, &rhs_value, &bytes_read_rhs);
+    if (err != ERR_0_OK) {
+        zx_free_string(&rhs_value);
+        return err;
+    }
+
+    // 4. Schrijf het resultaat definitief weg via de universele machine-setter
+    err = machine_set_variable(machine, var_name, indices, num_indices, desired_len, rhs_value);
+
+    // Netjes opruimen
+    zx_free_string(&rhs_value);
     return err;
 }
 static ZxError execute_cmd_list(ZxMachine machine, const uint8_t *cmd, size_t output_size) {

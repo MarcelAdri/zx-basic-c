@@ -111,7 +111,6 @@
             { main: '0', white: 'DELETE', above: '', below: 'FORMAT', onRed: '_' }
         ],
         // Rij 2: QWERTY
-        // Rij 2: QWERTY
         [
             { main: 'Q', white: 'PLOT', above: 'SIN', onRed: '<=', below: 'ASN' },
             { main: 'W', white: 'DRAW', above: 'COS', onRed: '<>', below: 'ACS' },
@@ -156,7 +155,6 @@
         const rowDiv = document.createElement('div');
         rowDiv.className = 'zx-row';
         row.forEach(key => {
-            // We bouwen nu de wrapper met tekst erboven en eronder!
             rowDiv.innerHTML += `
                 <div class="zx-key-wrapper">
                     <div class="kw-above">${key.above || ''}</div>
@@ -176,7 +174,7 @@
     let inputBytes = []; // Onze buffer voor de ruwe uint8_t waarden
     let cursorMode = 'K'; // Start altijd in Keyword modus
     let cursorPosition = 0; // Houdt bij waar de cursor in de byte-array staat
-    // --- STATE ENUMS (Gespiegeld uit C) ---
+
     const ZxState = Object.freeze({
         IDLE: 0,
         DIRECT: 1,
@@ -191,16 +189,12 @@
     });
 
     var Module = {
-        //print: function(text) { appendOutput(text, "stdout"); },
-        //printErr: function(text) { appendOutput(text, "error"); },
         onRuntimeInitialized: function() { initEmulator(); }
     };
 
     function initEmulator() {
-        // 1. Haal de pointer naar de versiestring op uit C
         const versionPtr = Module.ccall('UI_get_version', 'number', [], []);
 
-        // 2. We lezen het geheugen byte voor byte uit, totdat we de '0' (null-terminator) tegenkomen!
         let versionStr = "";
         let i = 0;
         while (Module.HEAPU8[versionPtr + i] !== 0) {
@@ -208,31 +202,28 @@
             i++;
         }
 
-        // 3. Update de statusbalk dynamisch
         document.getElementById("wasm-status").textContent = "ZX Spectrum BASIC WASM Module Geladen. v" + versionStr;
 
         spectrumMachinePointer = Module.ccall('UI_machine_create', 'number', [], []);
 
         renderScreens();
         updateDisplay();
-        // Start de hartslag!
         requestAnimationFrame(emulatorRunLoop);
     }
 
-    // --- 3. TOETSENBORD VANGER (Veilige Versie) ---
+    // --- 3. TOETSENBORD VANGER ---
     document.addEventListener("keydown", function(event) {
         const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
 
         if (event.key === "Escape" || (event.shiftKey && event.key === " ")) {
             event.preventDefault();
-
-            // Meld aan C dat er een BREAK-prikkel is!
             Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, 27]);
             return;
         }
+
         if (state === ZxState.RUNNING && waitReason === ZxWaitReason.NONE) {
-            event.preventDefault(); // Voorkom scrollen met spatie of andere browser-fratsen
+            event.preventDefault();
 
             let token = -1;
             if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
@@ -240,42 +231,38 @@
                     'UI_translate_keypress',
                     'number',
                     ['number', 'number'],
-                    [event.key.charCodeAt(0), 'L'.charCodeAt(0)] // Altijd 'L' modus voor INKEY$
+                    [event.key.charCodeAt(0), 'L'.charCodeAt(0)]
                 );
             } else if (event.key === "Enter") {
-                token = 13; // Enter kan ook door INKEY$ gelezen worden!
+                token = 13;
             }
 
-            // Als C het token herkent, melden we hem aan voor INKEY$,
-            // maar we stoppen hem pertinent NIET in inputBytes!
             if (token !== -1) {
                 Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, token]);
             }
-            return; // CRUCIAAL: Breek hier direct af! De rest van de editor-code wordt overgeslagen.
+            return;
         }
-        // --- DE EDIT TRIGGER (SHIFT + 1) ---
+
         if ((event.shiftKey && event.code === 'Digit1') || event.key === '!') {
             event.preventDefault();
             Module.ccall('UI_request_edit_current_line', 'void', ['number'], [spectrumMachinePointer]);
             return;
         }
 
-        // --- PIJLTJES (Zowel modern als historisch) ---
-        // OMHOOG (7)
         if (event.key === 'ArrowUp' || (event.shiftKey && event.code === 'Digit7')) {
             event.preventDefault();
             Module.ccall('UI_move_cursor_up', 'void', ['number'], [spectrumMachinePointer]);
-            renderScreens(); // <-- DE FIX: Teken het hoofdscherm opnieuw!
+            renderScreens();
             return;
         }
-        // OMLAAG (6)
+
         if (event.key === 'ArrowDown' || (event.shiftKey && event.code === 'Digit6')) {
             event.preventDefault();
             Module.ccall('UI_move_cursor_down', 'void', ['number'], [spectrumMachinePointer]);
-            renderScreens(); // <-- DE FIX: Teken het hoofdscherm opnieuw!
+            renderScreens();
             return;
         }
-        // LINKS (5)
+
         if (event.key === 'ArrowLeft' || (event.shiftKey && event.code === 'Digit5')) {
             event.preventDefault();
             if (cursorPosition > 0) {
@@ -285,7 +272,7 @@
             }
             return;
         }
-        // RECHTS (8)
+
         if (event.key === 'ArrowRight' || (event.shiftKey && event.code === 'Digit8')) {
             event.preventDefault();
             if (cursorPosition < inputBytes.length) {
@@ -296,10 +283,9 @@
             return;
         }
 
-        // --- BACKSPACE UPDATE ---
-        if (event.key === "Backspace" || (event.shiftKey && event.code === 'Digit0')) {
+        // --- BACKSPACE UPDATE (SHIFT+0 interceptie hier verwijderd!) ---
+        if (event.key === "Backspace") {
             if (cursorPosition > 0) {
-                // Haal 1 item weg vóór de cursor
                 inputBytes.splice(cursorPosition - 1, 1);
                 cursorPosition--;
                 autoSetCursor();
@@ -321,17 +307,12 @@
             event.preventDefault();
 
             let tokenToSend = -1;
-
             if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
-
-                // DE FIX: Alleen 'K' wordt gedegradeerd naar 'L' voor de 'n' en spatie.
-                // Als de gebruiker CTRL-L heeft gedrukt, blijft de activeMode netjes 'E'!
                 let activeMode = cursorMode;
                 if (cursorMode === 'K') {
                     activeMode = 'L';
                 }
 
-                // VERTAALSLAG: Vraag aan C welk token bij deze toets hoort!
                 tokenToSend = Module.ccall(
                     'UI_translate_keypress',
                     'number',
@@ -339,50 +320,37 @@
                     [event.key.charCodeAt(0), activeMode.charCodeAt(0)]
                 );
             } else if (event.key === "Enter") {
-                tokenToSend = 13; // Enter is altijd 13
+                tokenToSend = 13;
             }
 
             if (tokenToSend !== -1) {
                 Module.ccall('UI_resume', 'void', ['number', 'number'], [spectrumMachinePointer, tokenToSend]);
                 renderScreens();
-
-                // Zet na een scroll-actie de modus veiligheidshalve weer terug
                 setMode('K');
             }
-            return; // Blokkeer verdere invoer-afhandeling!
+            return;
         }
 
         if (waitReason === ZxWaitReason.PAUSE) {
-            event.preventDefault(); // Voorkom dat de toets in de buffer typt
+            event.preventDefault();
 
-            // 1. Vertaal de toets eerst naar een Spectrum-token (net zoals we beneden doen)
             let token = -1;
             if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
                 token = Module.ccall(
                     'UI_translate_keypress',
                     'number',
                     ['number', 'number'],
-                    [event.key.charCodeAt(0), 'L'.charCodeAt(0)] // Altijd 'L' modus voor INKEY$
+                    [event.key.charCodeAt(0), 'L'.charCodeAt(0)]
                 );
             } else if (event.key === "Enter") {
-                token = 13; // Enter is token 13 op de Spectrum
+                token = 13;
             }
 
-            // 2. Als het een bekende Spectrum-toets is, meld hem direct aan als 'NU INGEDRUKT'
             if (token !== -1) {
                 Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, token]);
             }
 
-            // 3. Pas daarna mag de handrem eraf en start de batch weer!
             Module.ccall('UI_resume', 'void', ['number', 'number'], [spectrumMachinePointer, 0]);
-
-            return;
-        }
-
-        if (event.key === "Backspace") {
-            inputBytes.pop();
-            autoSetCursor();
-            updateDisplay();
             return;
         }
 
@@ -392,7 +360,6 @@
         }
 
         if (event.key.length === 1 && !event.ctrlKey && !event.altKey) {
-            // JS is nu "dom" en vraagt het uitsluitend aan C
             const token = Module.ccall(
                 'UI_translate_keypress',
                 'number',
@@ -400,10 +367,8 @@
                 [event.key.charCodeAt(0), cursorMode.charCodeAt(0)]
             );
 
-            // GEEN JS-MAGIC MEER: We doen alleen iets als C het teken kent
             if (token !== -1) {
                 Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, token]);
-                // Voeg in OP de cursor positie, en schuif op!
                 inputBytes.splice(cursorPosition, 0, token);
                 cursorPosition++;
                 autoSetCursor();
@@ -415,22 +380,17 @@
     document.addEventListener("keyup", function(event) {
         if (!spectrumMachinePointer) return;
 
-        // Als de letter of de Escape-toets wordt losgelaten, gooien we de status op 0
         if (event.key.length === 1 || event.key === "Enter" || event.key === "Escape") {
             Module.ccall('UI_set_pressed_key', 'void', ['number', 'number'], [spectrumMachinePointer, 0]);
         }
     });
 
-
-
     function getFormattedLine(byteArray) {
         if (byteArray.length === 0) return "";
 
-        // Reserveer geheugen en kopieer de array (net als bij run_basic_line)
         const bufferPtr = Module._malloc(byteArray.length);
         Module.HEAPU8.set(byteArray, bufferPtr);
 
-        // Vraag C om de bytes om te toveren tot een leesbare string
         const formattedString = Module.ccall(
             'UI_format_zx_line',
             'string',
@@ -447,24 +407,18 @@
         document.getElementById("cursor").innerText = mode;
     }
 
-    // --- 4. VISUALISATIE VAN DE BYTES ---
-    // --- VISUALISATIE VAN DE BYTES ---
     function updateDisplay() {
-        // Veiligheidscheck
         if (cursorPosition < 0) cursorPosition = 0;
         if (cursorPosition > inputBytes.length) cursorPosition = inputBytes.length;
 
-        // Splits de bytes
         const leftBytes = inputBytes.slice(0, cursorPosition);
         const rightBytes = inputBytes.slice(cursorPosition);
 
-        // Vraag C om de twee helften mooi te maken
         const leftText = getFormattedLine(leftBytes);
         const rightText = getFormattedLine(rightBytes);
 
-        // Bouw de HTML veilig op (Voorkomt XSS en opmaak-breuken)
         const lineDiv = document.getElementById("input-line");
-        lineDiv.innerHTML = ""; // Maak leeg
+        lineDiv.innerHTML = "";
 
         lineDiv.appendChild(document.createTextNode(leftText));
 
@@ -476,15 +430,12 @@
         lineDiv.appendChild(document.createTextNode(rightText));
     }
 
-    // --- SLIMME CURSOR VIA C ---
     function autoSetCursor() {
         if (inputBytes.length === 0) {
             setMode('K');
             return;
         }
 
-        // DE FIX: Geef alleen de tekst VÓÓR de cursor aan C,
-        // want dat bepaalt in welke modus je nú typt!
         const leftBytes = inputBytes.slice(0, cursorPosition);
         if (leftBytes.length === 0) {
             setMode('K'); return;
@@ -498,28 +449,25 @@
 
         setMode(String.fromCharCode(modeAscii));
     }
+
     function renderScreens() {
         if (!spectrumMachinePointer) return;
 
-        // --- 1. HOOFDSCHERM (22 regels x 32 karakters = 704 bytes) ---
         const textOutput = Module.ccall('UI_get_text_screen_utf8', 'string', ['number'], [spectrumMachinePointer]);
-
         if (textOutput) {
             document.getElementById("console-output").textContent = textOutput;
         }
 
-        // --- 2. SYSTEEMSCHERM (2 regels x 32 karakters = 64 bytes) ---
         const sysOutput = Module.ccall('UI_get_system_screen_utf8', 'string', ['number'], [spectrumMachinePointer]);
         if (sysOutput) {
             document.getElementById("system-message").textContent = sysOutput;
         }
     }
-    // --- DE WASM GEHEUGEN KOPPELING ---
+
     function executeBuffer() {
         if (inputBytes.length === 0) return;
         cursorPosition = inputBytes.length;
 
-        // 1. Stuur de bytes naar de C-parser
         const bufferPtr = Module._malloc(inputBytes.length);
         Module.HEAPU8.set(inputBytes, bufferPtr);
 
@@ -531,16 +479,15 @@
         );
         Module._free(bufferPtr);
 
-        // 3. Wist de invoerregel in de HTML
         inputBytes = [];
         setMode('K');
         updateDisplay();
         renderScreens();
     }
+
     function triggerLoadTape(targetMachinePointer) {
         const fileInput = document.getElementById('tapeLoader');
 
-        // We overschrijven de onchange callback LIVE op het moment van klikken
         fileInput.onchange = function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -554,7 +501,6 @@
                 const bufferPtr = Module._malloc(size);
                 Module.HEAPU8.set(uint8Array, bufferPtr);
 
-                // De targetMachinePointer is hier direct beschikbaar dankzij de closure!
                 const err = Module.ccall(
                     'UI_deserialize_program',
                     'number',
@@ -575,14 +521,11 @@
             event.target.value = '';
         };
 
-        // Activeer de picker
         fileInput.click();
     }
 
-    // --- SAVE ---
     function triggerSaveTape(targetMachinePointer, filename) {
         try {
-            // 1. Schoon de bestandsnaam op en forceer de .zx extensie
             if (!filename || filename.trim() === "") {
                 filename = "program";
             }
@@ -590,21 +533,18 @@
                 filename += ".zx";
             }
 
-            // 2. Vraag aan C om de inpak-functie te draaien
             const sizePtr = Module._malloc(4);
             const bufferPtr = Module.ccall(
                 'UI_serialize_program', 'number',
                 ['number', 'number'], [targetMachinePointer, sizePtr]
             );
 
-            // BEVEILIGING: Als er geen programma is (of out-of-memory)
             if (bufferPtr === 0) {
                 alert("Emulator waarschuwing: Geen programma in het geheugen om op te slaan!");
                 Module._free(sizePtr);
                 return;
             }
 
-            // 3. Lees de data (FIX: Gebruik uitsluitend HEAPU8 om undefined-crashes te voorkomen)
             const size = Module.HEAPU8[sizePtr] |
                 (Module.HEAPU8[sizePtr + 1] << 8) |
                 (Module.HEAPU8[sizePtr + 2] << 16) |
@@ -613,11 +553,9 @@
             const wasmView = new Uint8Array(Module.HEAPU8.buffer, bufferPtr, size);
             const dataCopy = new Uint8Array(wasmView);
 
-            // 4. Geheugen vrijgeven
             Module._free(bufferPtr);
             Module._free(sizePtr);
 
-            // 5. Download activeren
             const blob = new Blob([dataCopy], { type: "application/octet-stream" });
             const url = URL.createObjectURL(blob);
 
@@ -631,35 +569,30 @@
             URL.revokeObjectURL(url);
 
         } catch (err) {
-            // Als WebAssembly nu nog struikelt, vangen we het af en loopt de emulator door!
             console.error("FATALE JS FOUT TIJDENS SAVE:", err);
             alert("Er is een interne fout opgetreden bij het opslaan:\n" + err.message);
         }
     }
-    function loadTokensIntoEditor(lineNumber, tokensPtr, length) {
-        inputBytes = []; // Maak de invoerregel leeg
 
-        // 1. Vertaal het regelnummer (int) naar losse cijfer-tokens
+    function loadTokensIntoEditor(lineNumber, tokensPtr, length) {
+        inputBytes = [];
+
         const lineStr = lineNumber.toString();
         for (let i = 0; i < lineStr.length; i++) {
-            inputBytes.push(lineStr.charCodeAt(i)); // '1' -> 49, '0' -> 48, etc.
+            inputBytes.push(lineStr.charCodeAt(i));
         }
 
-        // 2. Voeg een verplichte spatie toe (token 32)
-        // Dit triggert je C-cursor-logica om de modus direct op 'K' te zetten!
         inputBytes.push(32);
 
-        // 3. Plak de rest van de BASIC-tokens erachteraan
         for (let i = 0; i < length; i++) {
             inputBytes.push(Module.HEAPU8[tokensPtr + i]);
         }
         cursorPosition = inputBytes.length;
 
-        // 4. Ververs de weergave
         autoSetCursor();
         updateDisplay();
     }
-    // --- DE TURBO LOOP ---
+
     function emulatorRunLoop() {
         if (!spectrumMachinePointer) {
             requestAnimationFrame(emulatorRunLoop);
@@ -671,22 +604,14 @@
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
         const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
 
-        // Mogen we rekenen?
         if (waitReason === ZxWaitReason.NONE && (state === ZxState.RUNNING || state === ZxState.DIRECT)) {
-
-            // Geef C de zweep: voer 500 statements uit in deze milliseconde!
             Module.ccall('UI_execute_batch', 'void', ['number', 'number'], [spectrumMachinePointer, 500]);
-
-            // Ververs het beeldscherm nadat de batch klaar is (of halverwege pauzeerde)
             renderScreens();
         }
 
-        // Vraag de browser om het volgende frame
         requestAnimationFrame(emulatorRunLoop);
     }
-
 </script>
 <script src="zx_basic.js"></script>
-
 </body>
 </html>

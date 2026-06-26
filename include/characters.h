@@ -34,6 +34,7 @@
 #define ZX_OP_NOT     195
 
 #define ZX_TOKEN_BIN      196
+#define ZX_TOKEN_TO       204
 
 
 //ZX Spectrum functies

@@ -708,3 +708,20 @@ ZxError machine_set_variable(ZxMachine machine, const char *var_name, const uint
 
     return zx_set_numeric_array_element(array, indices, num_indices_passed, value);
 }
+ZxError machine_reserve_variable(ZxMachine machine, const char *var_name, const uint16_t *dimension_sizes, const uint8_t num_dimensions) {
+    if (machine == NULL || var_name == NULL || dimension_sizes == NULL) return ERR_UNKNOWN;
+
+    if (strlen(var_name) == 2 && var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+
+        int i = name_to_index((uint8_t)var_name[0]);
+        if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
+
+        return zx_dim_string_slot(num_dimensions, dimension_sizes, &machine->string_variables[i]);
+    }
+    if (strlen(var_name) != 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    int i = name_to_index((uint8_t)var_name[0]);
+    if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
+
+    return zx_dim_numeric_array(num_dimensions, dimension_sizes, &machine->numeric_arrays[i]);
+}

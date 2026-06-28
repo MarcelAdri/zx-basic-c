@@ -164,7 +164,7 @@ static ZxError parse_array_index_string(ParserContext *ctx, uint16_t *indices, u
         // =========================================================================
         if (ctx->buffer[ctx->cursor] == ZX_TOKEN_TO) {
             uint16_t begin = 1; // Slicen zonder startwaarde begint altijd op karakter 1
-            if (index_counter > 10) return ERR_3_SUBSCRIPT_WRONG;
+            if (index_counter > 10) return ERR_4_OUT_OF_MEMORY;
             indices[index_counter++] = begin;
 
             ctx->cursor++; // Skip 'TO'
@@ -284,7 +284,7 @@ static ZxError parse_array_index_numeric(ParserContext *ctx, uint16_t *indices, 
         if (err != ERR_0_OK) return err;
 
         uint16_t parsed_idx = (uint16_t)index_num;
-        if (index_counter > 10) return ERR_3_SUBSCRIPT_WRONG;
+        if (index_counter > 10) return ERR_4_OUT_OF_MEMORY;
         indices[index_counter++] = parsed_idx;
 
         zx_skip_spaces(ctx);
@@ -309,7 +309,6 @@ static ZxError parse_array_index_numeric(ParserContext *ctx, uint16_t *indices, 
         // Als er na een expressie géén komma of sluithaak staat, is het pure wartaal!
         return ERR_C_NONSENSE_IN_BASIC;
     }
-
     return ERR_C_NONSENSE_IN_BASIC;
 }
 
@@ -809,6 +808,42 @@ ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, si
                 return ERR_C_NONSENSE_IN_BASIC;
             }
             ctx.cursor++; // Skip ')'
+            zx_skip_spaces(&ctx);
+
+            // =========================================================================
+            // DE KRONKEL-UPDATE: Gekoppelde slicing-notatie afvangen (bijv. A$(2)(7) of A$(2)(7 TO 9))
+            // =========================================================================
+            while (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+                ctx.cursor++; // Skip de opeenvolgende '('
+                zx_skip_spaces(&ctx);
+
+                uint16_t next_indices[10] = {0};
+                uint8_t next_num_indices = 0;
+                int32_t next_desired_len = SLICE_NO_TO;
+
+                // Ontleed de inhoud van de tweede (of opeenvolgende) haakjes
+                err = parse_array_index_string(&ctx, next_indices, &next_num_indices, &next_desired_len);
+                if (err != ERR_0_OK) return err;
+
+                if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+                    return ERR_C_NONSENSE_IN_BASIC;
+                }
+                ctx.cursor++; // Skip ')'
+                zx_skip_spaces(&ctx);
+
+                // Combineer de losse indexering tot de uiteindelijke multi-dimensionale array-referentie
+                if (next_num_indices == 1) {
+                    if (*out_num_indices < 10) {
+                        out_indices[*out_num_indices] = next_indices[0];
+                        (*out_num_indices)++;
+                        *out_desired_len = next_desired_len;
+                    } else {
+                        return ERR_3_SUBSCRIPT_WRONG;
+                    }
+                } else {
+                    return ERR_C_NONSENSE_IN_BASIC;
+                }
+            }
         }
     } else if (strlen(out_var_name) == 1) {
         // Numerieke array
@@ -827,6 +862,44 @@ ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, si
     }
 
     // Vertel de beller exact hoever we in het rauwe buffer zijn doorgeschoven!
+    *bytes_read = ctx.cursor;
+    return ERR_0_OK;
+}
+ZxError zx_parse_variable_for_dim(ZxMachine machine, const uint8_t *buffer, size_t size, size_t *bytes_read, char *out_var_name, uint16_t *out_indices, uint8_t *out_num_indices) {
+    if (buffer == NULL || bytes_read == NULL || out_var_name == NULL) return ERR_UNKNOWN;
+
+    ParserContext ctx;
+    ctx.machine = machine;
+    ctx.buffer = buffer;
+    ctx.size = size;
+    ctx.cursor = 0;
+
+    size_t name_bytes;
+    ZxError err = parse_variable_name(ctx.buffer, ctx.size, out_var_name, &name_bytes);
+    if (err != ERR_0_OK) return err;
+    size_t name_len = strlen(out_var_name);
+    if ((name_len > 2) || (name_len == 2 && out_var_name[1] != get_token_from_key('$', KEYMAP_MODE_LITERAL))) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    ctx.cursor += name_bytes;
+    zx_skip_spaces(&ctx);
+
+    if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+        ctx.cursor++;
+        zx_skip_spaces(&ctx);
+
+        err = parse_array_index_numeric(&ctx, out_indices, out_num_indices);
+        if (err != ERR_0_OK) return err;
+
+        if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+        ctx.cursor++;
+    } else {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+
     *bytes_read = ctx.cursor;
     return ERR_0_OK;
 }

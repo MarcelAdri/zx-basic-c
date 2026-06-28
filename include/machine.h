@@ -88,5 +88,6 @@ void machine_set_pressed_key(ZxMachine machine, uint8_t token);
 uint8_t machine_get_pressed_key(ZxMachine machine);
 ZxError machine_get_variable(ZxMachine machine, const char *var_name, const uint16_t *indices, uint8_t num_indices_passed, int32_t desired_len, ZxValue *value);
 ZxError machine_set_variable(ZxMachine machine, const char *var_name, const uint16_t *indices, uint8_t num_indices_passed, int32_t desired_len, ZxValue value);
+ZxError machine_reserve_variable(ZxMachine machine, const char *var_name, const uint16_t *dimension_sizes, uint8_t num_dimensions);
 
 #endif //ZX_BASIC_C_MACHINE_H

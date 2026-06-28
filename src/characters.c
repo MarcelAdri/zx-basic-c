@@ -692,7 +692,6 @@ bool is_zx_digit_character(const uint8_t c) {
 bool is_zx_number_character(const uint8_t c) {
     if ((c >= 48 && c <= 57) ||  //0-9
         c == 46 ||               //.
-        c == 44 ||               //,
         c == 69 ||               //E
         c == 101                 //e
         ) {

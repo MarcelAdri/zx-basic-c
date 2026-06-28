@@ -188,7 +188,10 @@
         PAUSE: 3
     });
 
+    // --- DE RESTORED PRINT BINDINGS VOOR F12 ---
     var Module = {
+        print: function(text) { console.log(text); },
+        printErr: function(text) { console.error(text); },
         onRuntimeInitialized: function() { initEmulator(); }
     };
 
@@ -283,7 +286,6 @@
             return;
         }
 
-        // --- BACKSPACE UPDATE (SHIFT+0 interceptie hier verwijderd!) ---
         if (event.key === "Backspace") {
             if (cursorPosition > 0) {
                 inputBytes.splice(cursorPosition - 1, 1);
@@ -402,6 +404,7 @@
         return formattedString;
     }
 
+    // --- HULP EN TRANSLATION WRAPPERS ---
     function setMode(mode) {
         cursorMode = mode;
         document.getElementById("cursor").innerText = mode;

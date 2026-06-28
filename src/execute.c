@@ -21,6 +21,45 @@ static ZxError execute_cmd_cls(ZxMachine machine) {
     machine_clear_text_screen(machine);
     return ERR_0_OK;
 }
+static ZxError execute_cmd_dim(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    size_t cursor = 1;
+
+    while (cursor < output_size) {
+
+        while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+        if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+        char var_name[MAX_VAR_NAME_LEN] = {0};
+        uint16_t dimension_sizes[10] = {0};
+        uint8_t num_dimensions = 0;
+        size_t bytes_read = 0;
+
+        ZxError err = zx_parse_variable_for_dim(
+            machine, cmd + cursor, output_size - cursor, &bytes_read,
+            var_name, dimension_sizes, &num_dimensions
+        );
+        if (err != ERR_0_OK) return err;
+
+        cursor += bytes_read;
+
+        err = machine_reserve_variable(machine, var_name, dimension_sizes, num_dimensions);
+        if (err != ERR_0_OK) return err;
+
+        while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+
+        if (cursor >= output_size) break;
+
+        if (cmd[cursor] == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+            cursor++;
+        } else {
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+    }
+
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
         return ERR_C_NONSENSE_IN_BASIC;
@@ -377,6 +416,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                 return ERR_C_NONSENSE_IN_BASIC;
             }
             return execute_cmd_cls(machine);
+        case ZX_STATEMENT_DIM:
+            return execute_cmd_dim(machine, input, input_size);
         case ZX_STATEMENT_GO_TO:
             return execute_cmd_go_to(machine, input, input_size);
         case ZX_STATEMENT_LET:

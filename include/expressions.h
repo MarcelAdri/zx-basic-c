@@ -21,5 +21,6 @@ typedef struct {
 
 ZxError solve_expression(ZxMachine machine, const uint8_t *expression, size_t expression_size, ZxValue *result, size_t *bytes_read);
 ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, size_t size, size_t *bytes_read, char *out_var_name, uint16_t *out_indices, uint8_t *out_num_indices, int32_t *out_desired_len);
+ZxError zx_parse_variable_for_dim(ZxMachine machine, const uint8_t *buffer, size_t size, size_t *bytes_read, char *out_var_name, uint16_t *out_indices, uint8_t *out_num_indices);
 
 #endif //ZX_BASIC_C_EXPRESSIONS_H

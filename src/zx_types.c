@@ -363,22 +363,27 @@ ZxError zx_get_string_element(const ZxStringSlot *slot, const uint16_t *indices,
         flat_idx = flat_idx * slot->dimension_sizes[i] + idx;
     }
 
-    size_t string_len = 1; // Standaardwaarde als alle dimensies zijn opgegeven
+    // --- PAS 2: Bepaal de doellengte (string_len) en corrigeer flat_idx ---
+    size_t string_len = 1;
 
-    if (num_indices_passed == slot->num_dimensions) {
+    if (num_indices_passed == slot->num_dimensions - 1) {
+        // GEVAL 1: De gebruiker vraagt een HELE rij op (bijv. a$(3))
+        size_t last_dim_size = slot->dimension_sizes[slot->num_dimensions - 1];
+        flat_idx *= last_dim_size;   // Verschuif de pointer naar het begin van de gevraagde rij!
+        string_len = last_dim_size;  // De lengte is de volledige breedte van de rij (10 tekens)
+    }
+    else if (num_indices_passed == slot->num_dimensions) {
+        // GEVAL 2: De gebruiker vraagt een specifiek karakter of slice op (bijv. a$(3, 2 TO 7))
         size_t last_dim_idx = slot->num_dimensions - 1;
         size_t last_dim_size = slot->dimension_sizes[last_dim_idx];
         size_t char_pos_in_row = indices[last_dim_idx] - 1;
 
         if (desired_len >= 0) {
-            // Geval: A$(2, 4 TO 6) of de lege string A$(2, 6 TO 4)
             string_len = desired_len;
         } else if (desired_len == SLICE_OPEN_TO) {
-            // Geval: A$(2, 4 TO ) -> Slicen tot het einde van deze specifieke matrix-rij!
             string_len = last_dim_size - char_pos_in_row;
         } else {
-            // Geval: desired_len == SLICE_NO_TO -> A$(2, 4) ZONDER TO. Betekent exact 1 karakter!
-            string_len = 1;
+            string_len = 1; // SLICE_NO_TO -> exact 1 karakter
         }
     }
 

@@ -71,6 +71,7 @@
 
 //Spectrum statements
 #define ZX_STATEMENT_CLS 251
+#define ZX_STATEMENT_DIM 233
 #define ZX_STATEMENT_GO_SUB 237
 #define ZX_STATEMENT_GO_TO 236
 #define ZX_STATEMENT_LET 241

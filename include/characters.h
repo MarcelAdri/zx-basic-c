@@ -34,18 +34,17 @@
 #define ZX_OP_NOT     195
 
 #define ZX_CHAR_SPACE   32
+#define ZX_CHAR_COMMA   44
 
-#define ZX_TOKEN_BIN      196
-#define ZX_TOKEN_TO       204
 #define ZX_TOKEN_AT       172
+#define ZX_TOKEN_BIN      196
 #define ZX_TOKEN_TAB      173
-
+#define ZX_TOKEN_TO       204
 
 //ZX Spectrum functies
 #define ZX_FUN_ABS      189
 #define ZX_FUN_ACS      182
 #define ZX_FUN_ASN      181
-#define ZX_FUN_AT       172
 #define ZX_FUN_ATN      183
 #define ZX_FUN_ATTR     171
 #define ZX_FUN_CHR_S    194
@@ -67,7 +66,6 @@
 #define ZX_FUN_SIN      178
 #define ZX_FUN_SQR      187
 #define ZX_FUN_STR_S    193
-#define ZX_FUN_TAB      173
 #define ZX_FUN_TAN      180
 #define ZX_FUN_USR      192
 #define ZX_FUN_VAL      176

@@ -46,8 +46,8 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
 | 169   | POINT        | ZX_FUN_POINT           |                          | TODO                                  |
 | 170   | SCREEN$      | ZX_FUN_SCREEN_S        | zx_function_screen_s     |                                       |
 | 171   | ATTR         | ZX_FUN_ATTR            |                          | TODO                                  |
-| 172   | AT           | ZX_FUN_AT              |                          | TODO                                  |
-| 173   | TAB          | ZX_FUN_TAB             |                          | TODO                                  |
+| 172   | AT           | ZX_TOKEN_AT            | execute_cmd_print        |                                       |
+| 173   | TAB          | ZX_TOKEN_TAB           | execute_cmd_print        |                                       |
 | 174   | VAL$         | ZX_FUN_VAL_S           | zx_function_val_s        |                                       |
 | 175   | CODE         | ZX_FUN_CODE            | zx_function_code         |                                       |
 | 176   | VAL          | ZX_FUN_VAL             | zx_function_val          |                                       |

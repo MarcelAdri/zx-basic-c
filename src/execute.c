@@ -297,7 +297,6 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             uint8_t tab_stop_value = (uint16_t)tab_stop_value_dbl % 32;
             const uint8_t current_x = machine_get_text_cursor_x(machine);
 
-            // Gecorrigeerde formule (32 in plaats van 31)
             uint8_t num_spaces = (tab_stop_value < current_x) ? (32 - current_x) + tab_stop_value : tab_stop_value - current_x;
 
             uint8_t spaces[32];
@@ -314,7 +313,70 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         }
 
         // === STAP 3: MODIFIERS AFVANGEN (AT) ===
-        // if (token == ZX_TOKEN_AT) { ... Hier kun je straks vlekkeloos AT inbouwen! ... continue; }
+        if (token == ZX_TOKEN_AT) {
+            cursor++;
+            if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+            ZxValue coord;
+            zx_init_value(&coord);
+            size_t bytes_read = 0;
+            ZxError err = solve_expression(machine, cmd + cursor, output_size - cursor, &coord, &bytes_read);
+            if (err != ERR_0_OK) {
+                zx_free_string(&coord);
+                return err;
+            }
+            double y_sbl;
+            err = zx_get_number(coord, &y_sbl);
+            if (err != ERR_0_OK) {
+                zx_free_string(&coord);
+                return err;
+            }
+            if (y_sbl < 0 || y_sbl > 31) {
+                zx_free_string(&coord);
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+            uint8_t y = (uint8_t)y_sbl;
+            zx_free_string(&coord);
+            cursor += bytes_read;
+
+            while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+            if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+            if (cmd[cursor] != ZX_CHAR_COMMA) return ERR_C_NONSENSE_IN_BASIC;
+            cursor++;
+            if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+            bytes_read = 0;
+            err = solve_expression(machine, cmd + cursor, output_size - cursor, &coord, &bytes_read);
+            if (err != ERR_0_OK) {
+                zx_free_string(&coord);
+                return err;
+            }
+            double x_dbl;
+            err = zx_get_number(coord, &x_dbl);
+            if (err != ERR_0_OK) {
+                zx_free_string(&coord);
+                return err;
+            }
+            if (x_dbl < 0) {
+                zx_free_string(&coord);
+                return ERR_C_NONSENSE_IN_BASIC;
+            }
+            if (x_dbl > 21) {
+                zx_free_string(&coord);
+                return ERR_5_OUT_OF_SCREEN;
+            }
+            uint8_t x = (uint8_t)x_dbl;
+            zx_free_string(&coord);
+
+            cursor += bytes_read;
+
+            machine_set_text_cursor_y(machine, y);
+            machine_set_text_cursor_x(machine, x);
+
+            print_newline = true;
+            continue;
+        }
 
         // === STAP 4: ALS HET GEEN MODIFIER OF SEPARATOR IS -> NORMALE EXPRESSIE ===
         ZxValue result;

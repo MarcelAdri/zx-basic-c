@@ -104,7 +104,7 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
 | 230   | NEW          | ZX_STATEMENT_NEW       | execute_cmd_new          | TODO: de OK melding geeft statement 2 |
 | 231   | BORDER       |                        |                          | TODO                                  |
 | 232   | CONTINUE     |                        |                          | TODO                                  |
-| 233   | DIM          |                        |                          | TODO                                  |
+| 233   | DIM          | ZX_STATEMENT_DIM       | execute_cmd_dim          |                                       |
 | 234   | REM          | ZX_STATEMENT_REM       | extract_statement        |                                       |
 | 235   | FOR          |                        |                          | TODO                                  |
 | 236   | GO TO        | ZX_STATEMENT_GO_TO     | execute_cmd_go_to        |                                       |

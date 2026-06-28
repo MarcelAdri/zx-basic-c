@@ -33,8 +33,12 @@
 #define ZX_OP_OR      197
 #define ZX_OP_NOT     195
 
+#define ZX_CHAR_SPACE   32
+
 #define ZX_TOKEN_BIN      196
 #define ZX_TOKEN_TO       204
+#define ZX_TOKEN_AT       172
+#define ZX_TOKEN_TAB      173
 
 
 //ZX Spectrum functies

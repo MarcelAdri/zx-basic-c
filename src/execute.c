@@ -232,13 +232,93 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
     }
 
     size_t cursor = 1;
-    bool print_newline = true; // Standaard printen we een enter op het eind
+    bool print_newline = true;
 
     while (cursor < output_size) {
-        print_newline = true;
+        // Altijd eventuele witruimte skippen aan de start van de iteratie
+        while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+        if (cursor >= output_size) break;
+
+        uint8_t token = cmd[cursor];
+
+        // === STAP 1: SCHEIDINGSTEKENS AFVANGEN ===
+        if (token == get_token_from_key(';', KEYMAP_MODE_LITERAL)) {
+            print_newline = false;
+            cursor++;
+            continue;
+        }
+        if (token == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+            int current_x = machine_get_text_cursor_x(machine);
+            if (current_x < 16) {
+                machine_set_text_cursor_x(machine, 16);
+            } else {
+                machine_next_line(machine);
+            }
+            print_newline = false;
+            cursor++;
+            continue;
+        }
+        if (token == get_token_from_key('\'', KEYMAP_MODE_LITERAL)) {
+            machine_next_line(machine);
+            print_newline = false;
+            cursor++;
+            continue;
+        }
+
+        // === STAP 2: MODIFIERS AFVANGEN (TAB) ===
+        if (token == ZX_TOKEN_TAB) {
+            cursor++; // Alleen het TAB-token zelf consumeren
+            if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+            ZxValue tab_stop;
+            zx_init_value(&tab_stop);
+            size_t bytes_read = 0;
+            ZxError err = solve_expression(machine, cmd + cursor, output_size - cursor, &tab_stop, &bytes_read);
+            if (err != ERR_0_OK) {
+                zx_free_string(&tab_stop);
+                return err;
+            }
+
+            double tab_stop_value_dbl;
+            err = zx_get_number(tab_stop, &tab_stop_value_dbl);
+            if (err != ERR_0_OK) {
+                zx_free_string(&tab_stop);
+                return err;
+            }
+
+            if (tab_stop_value_dbl < 0 || tab_stop_value_dbl > 65535) {
+                zx_free_string(&tab_stop);
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            cursor += bytes_read; // Schuif cursor op tot ná de getal-expressie
+            zx_free_string(&tab_stop);
+
+            uint8_t tab_stop_value = (uint16_t)tab_stop_value_dbl % 32;
+            const uint8_t current_x = machine_get_text_cursor_x(machine);
+
+            // Gecorrigeerde formule (32 in plaats van 31)
+            uint8_t num_spaces = (tab_stop_value < current_x) ? (32 - current_x) + tab_stop_value : tab_stop_value - current_x;
+
+            uint8_t spaces[32];
+            memset(spaces, ZX_CHAR_SPACE, sizeof(spaces));
+
+            ZxValue spaces_value;
+            zx_init_value(&spaces_value);
+            zx_assign_string(spaces, num_spaces, &spaces_value);
+            machine_print_value(machine, spaces_value);
+            zx_free_string(&spaces_value);
+
+            print_newline = true; // Een TAB herstelt de newline-wens, tenzij er straks een ; volgt!
+            continue;
+        }
+
+        // === STAP 3: MODIFIERS AFVANGEN (AT) ===
+        // if (token == ZX_TOKEN_AT) { ... Hier kun je straks vlekkeloos AT inbouwen! ... continue; }
+
+        // === STAP 4: ALS HET GEEN MODIFIER OF SEPARATOR IS -> NORMALE EXPRESSIE ===
         ZxValue result;
         zx_init_value(&result);
-
         size_t bytes_read = 0;
         ZxError err = solve_expression(machine, cmd + cursor, output_size - cursor, &result, &bytes_read);
         if (err != ERR_0_OK) {
@@ -247,40 +327,9 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         }
         machine_print_value(machine, result);
         zx_free_string(&result);
+
         cursor += bytes_read;
-
-        while (cursor < output_size && is_zx_space(cmd[cursor])) {
-            cursor++;
-        }
-
-        if (cursor >= output_size) break;
-
-        // Kijk wat het scheidingsteken is
-        uint8_t separator = cmd[cursor];
-
-        if (separator == get_token_from_key(';', KEYMAP_MODE_LITERAL)) {
-            print_newline = false; // Bij ";" onderdrukken we de enter
-            cursor++;
-        }
-        else if (separator == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
-            int current_x = machine_get_text_cursor_x(machine);
-            if (current_x < 16) {
-                machine_set_text_cursor_x(machine, 16);
-            } else {
-                machine_next_line(machine);
-            }
-
-            print_newline = false;
-            cursor++;
-        } else if (separator == get_token_from_key('\'', KEYMAP_MODE_LITERAL)) {
-            machine_next_line(machine);
-
-            print_newline = false;
-            cursor++;
-        }
-        else {
-            return ERR_C_NONSENSE_IN_BASIC;
-        }
+        print_newline = true; // Een geprinte waarde herstelt de newline-wens eveneens
     }
 
     if (print_newline) {

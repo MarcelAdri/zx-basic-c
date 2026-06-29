@@ -144,7 +144,7 @@ ZxError formatted_number(const double number, uint8_t *out_string, const size_t 
 
     // Spectrum Rule: 0 is printed as a single digit 0
     if (number == 0.0f) {
-        out_string[0] = get_token_from_key('0', KEYMAP_MODE_LITERAL);
+        out_string[0] = ZX_DIGIT_ZERO;
         *bytes_written = 1;
         return ERR_0_OK;
     }
@@ -278,14 +278,14 @@ ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, 
         i++;
     }
     uint8_t lit[expression_size];
-    if (i < expression_size && expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+    if (i < expression_size && expression[i] == ZX_CHAR_QUOTES) {
         size_t len = 0;
         i++;
         while (i < expression_size) {
 
-            if  (expression[i] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
-                if (i + 1 < expression_size && expression[i+1] == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
-                    lit[len] = get_token_from_key('"', KEYMAP_MODE_LITERAL);
+            if  (expression[i] == ZX_CHAR_QUOTES) {
+                if (i + 1 < expression_size && expression[i+1] == ZX_CHAR_QUOTES) {
+                    lit[len] = ZX_CHAR_QUOTES;
                     len++;
                     i += 2;
                     continue;
@@ -297,7 +297,7 @@ ZxError parse_string_literal(const uint8_t *expression, size_t expression_size, 
                 if (is_zx_graphics_character(expression[i])) {  //TODO: graphic characters
                     lit[len] = 96;  //ukp
                 } else {
-                    lit[len] = get_token_from_key('?', KEYMAP_MODE_LITERAL);
+                    lit[len] = ZX_CHAR_QUESTION;
                 }
             } else {
                 lit[len] = expression[i];
@@ -340,7 +340,7 @@ ZxError parse_string_literal_with_quotes(const uint8_t *expression, size_t expre
     memcpy(lit + 1, text_in, inner_length);
 
     // 5. Haal de quote op en plak deze op de voor- en achterkant
-    uint8_t quote_token = (uint8_t)get_token_from_key('"', KEYMAP_MODE_LITERAL);
+    uint8_t quote_token = ZX_CHAR_QUOTES;
     lit[0] = quote_token;
     lit[inner_length + 1] = quote_token;
 
@@ -360,7 +360,7 @@ ZxError parse_variable_name(const uint8_t *expression, size_t expression_size, c
     }
 
     if (i < expression_size - 1 && is_zx_alpha(expression[i])) {
-        if (expression[i+1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+        if (expression[i+1] == ZX_CHAR_DOLLAR) {
             variable_name[0] = *get_content_from_token(expression[i]);
             variable_name[1] = '$';
             variable_name[2] = '\0';

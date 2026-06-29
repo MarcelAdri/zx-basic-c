@@ -627,7 +627,7 @@ ZxError machine_get_variable(ZxMachine machine, const char *var_name, const uint
         return ERR_UNKNOWN;
     }
     //1. string variabelen
-    if (strlen(var_name) == 2 && var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+    if (strlen(var_name) == 2 && var_name[1] == ZX_CHAR_DOLLAR) {
         int i = name_to_index((uint8_t)var_name[0]);
         if (i == NOT_FOUND) return ERR_2_VARIABLE_NOT_FOUND;
         if (!machine->string_variables[i].exists) return ERR_2_VARIABLE_NOT_FOUND;
@@ -664,7 +664,7 @@ ZxError machine_set_variable(ZxMachine machine, const char *var_name, const uint
     // =========================================================================
     // 1. DOEL IS EEN STRING VARIABELE OF STRING ARRAY (bijv. "a$")
     // =========================================================================
-    if (strlen(var_name) == 2 && var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+    if (strlen(var_name) == 2 && var_name[1] == ZX_CHAR_DOLLAR) {
 
         if (value.type != ZX_TYPE_STRING) {
             return ERR_C_NONSENSE_IN_BASIC; // Sinclair type mismatch
@@ -711,7 +711,7 @@ ZxError machine_set_variable(ZxMachine machine, const char *var_name, const uint
 ZxError machine_reserve_variable(ZxMachine machine, const char *var_name, const uint16_t *dimension_sizes, const uint8_t num_dimensions) {
     if (machine == NULL || var_name == NULL || dimension_sizes == NULL) return ERR_UNKNOWN;
 
-    if (strlen(var_name) == 2 && var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+    if (strlen(var_name) == 2 && var_name[1] == ZX_CHAR_DOLLAR) {
 
         int i = name_to_index((uint8_t)var_name[0]);
         if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;

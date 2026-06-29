@@ -35,7 +35,7 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
     String Slicing: 
     * A$(4) of A$(4 TO ) zonder expliciete eindgrens gebruikt gewenste lengtevlaggen (-1 resp. -2) om aan te geven dat er tot het absolute einde van de string/rij gesliced moet worden.
     * A$(4 TO 2) (waarbij eind < begin) resulteert in een expliciet berekende gewenste lengte van 0, wat correct leidt tot een legitieme, lege string.
-4. Implementatiatie monitor actionable tokens
+4. Implementatie monitor actionable tokens
 
 | Token | Beschrijving | Constant               | Implementatie            | Opmerkingen                           |
 |-------|--------------|------------------------|--------------------------|---------------------------------------|

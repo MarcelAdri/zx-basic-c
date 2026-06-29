@@ -51,7 +51,7 @@ static ZxError execute_cmd_dim(ZxMachine machine, const uint8_t *cmd, size_t out
 
         if (cursor >= output_size) break;
 
-        if (cmd[cursor] == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+        if (cmd[cursor] == ZX_CHAR_COMMA) {
             cursor++;
         } else {
             return ERR_C_NONSENSE_IN_BASIC;
@@ -117,7 +117,7 @@ static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t out
     while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
 
     // 2. Controleer op de aanwezigheid van de '='
-    if (cursor >= output_size || cmd[cursor] != get_token_from_key('=', KEYMAP_MODE_LITERAL)) {
+    if (cursor >= output_size || cmd[cursor] != ZX_OP_EQUAL) {
         return ERR_C_NONSENSE_IN_BASIC;
     }
     cursor++; // Consumeer de '='
@@ -242,12 +242,12 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         uint8_t token = cmd[cursor];
 
         // === STAP 1: SCHEIDINGSTEKENS AFVANGEN ===
-        if (token == get_token_from_key(';', KEYMAP_MODE_LITERAL)) {
+        if (token == ZX_CHAR_SEMICOLON) {
             print_newline = false;
             cursor++;
             continue;
         }
-        if (token == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+        if (token == ZX_CHAR_COMMA) {
             int current_x = machine_get_text_cursor_x(machine);
             if (current_x < 16) {
                 machine_set_text_cursor_x(machine, 16);
@@ -258,7 +258,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             cursor++;
             continue;
         }
-        if (token == get_token_from_key('\'', KEYMAP_MODE_LITERAL)) {
+        if (token == ZX_CHAR_QUOTE) {
             machine_next_line(machine);
             print_newline = false;
             cursor++;
@@ -325,17 +325,25 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 zx_free_string(&coord);
                 return err;
             }
-            double y_sbl;
-            err = zx_get_number(coord, &y_sbl);
+            double y_dbl;
+            err = zx_get_number(coord, &y_dbl);
             if (err != ERR_0_OK) {
                 zx_free_string(&coord);
                 return err;
             }
-            if (y_sbl < 0 || y_sbl > 31) {
+            if (y_dbl < 0) {
+                zx_free_string(&coord);
+                return ERR_C_NONSENSE_IN_BASIC;
+            }
+            if (y_dbl > 21) {
+                zx_free_string(&coord);
+                return ERR_5_OUT_OF_SCREEN;
+            }
+            if (y_dbl < 0 || y_dbl > 31) {
                 zx_free_string(&coord);
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
-            uint8_t y = (uint8_t)y_sbl;
+            uint8_t y = (uint8_t)y_dbl;
             zx_free_string(&coord);
             cursor += bytes_read;
 
@@ -358,13 +366,9 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 zx_free_string(&coord);
                 return err;
             }
-            if (x_dbl < 0) {
+            if (x_dbl < 0 || x_dbl > 31) {
                 zx_free_string(&coord);
-                return ERR_C_NONSENSE_IN_BASIC;
-            }
-            if (x_dbl > 21) {
-                zx_free_string(&coord);
-                return ERR_5_OUT_OF_SCREEN;
+                return ERR_B_INTEGER_OUT_OF_RANGE;
             }
             uint8_t x = (uint8_t)x_dbl;
             zx_free_string(&coord);

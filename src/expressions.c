@@ -171,7 +171,7 @@ static ZxError parse_array_index_string(ParserContext *ctx, uint16_t *indices, u
             zx_skip_spaces(ctx);
 
             // Als er nóg een expressie achter TO staat (bijv. TO 5)
-            if (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+            if (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_CLOSE) {
                 ZxValue eind;
                 zx_init_value(&eind);
                 err = parse_expression(ctx, &eind);
@@ -217,7 +217,7 @@ static ZxError parse_array_index_string(ParserContext *ctx, uint16_t *indices, u
         // =========================================================================
         uint8_t next_token = ctx->buffer[ctx->cursor];
 
-        if (next_token == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+        if (next_token == ZX_CHAR_COMMA) {
             ctx->cursor++; // Skip de komma en ga vrolijk door naar de volgende dimensie
             continue;
         }
@@ -227,7 +227,7 @@ static ZxError parse_array_index_string(ParserContext *ctx, uint16_t *indices, u
             zx_skip_spaces(ctx);
 
             // Als er een eindwaarde is opgegeven (bijv. 4 TO 6)
-            if (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+            if (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_CLOSE) {
                 ZxValue eind;
                 zx_init_value(&eind);
                 err = parse_expression(ctx, &eind);
@@ -247,7 +247,7 @@ static ZxError parse_array_index_string(ParserContext *ctx, uint16_t *indices, u
             return ERR_0_OK; // Klaar!
         }
 
-        if (next_token == get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+        if (next_token == ZX_CHAR_BRACKET_CLOSE) {
             // We zijn op de sluitende haak gestuit zonder slicer (bijv. A$(2, 3) of A$(2))
             *num_indices_passed = index_counter;
             return ERR_0_OK; // parse_factor consumeert de ')' straks netjes
@@ -295,12 +295,12 @@ static ZxError parse_array_index_numeric(ParserContext *ctx, uint16_t *indices, 
         // =========================================================================
         uint8_t next_token = ctx->buffer[ctx->cursor];
 
-        if (next_token == get_token_from_key(',', KEYMAP_MODE_LITERAL)) {
+        if (next_token == ZX_CHAR_COMMA) {
             ctx->cursor++; // Skip de komma en ga vrolijk door naar de volgende dimensie
             continue;
         }
 
-        if (next_token == get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+        if (next_token == ZX_CHAR_BRACKET_CLOSE) {
 
             *num_indices_passed = index_counter;
             return ERR_0_OK; // parse_factor consumeert de ')' straks netjes
@@ -576,14 +576,14 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
     ZxValue value;
     zx_init_value(&value);
 
-    if (token == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+    if (token == ZX_CHAR_BRACKET_OPEN) {
         ctx->cursor++;
         zx_skip_spaces(ctx);
 
         err = parse_expression(ctx, &value);
         if (err != ERR_0_OK) goto error_cleanup;
 
-        if (ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+        if (ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_CLOSE) {
             err = ERR_C_NONSENSE_IN_BASIC;
             goto error_cleanup;
         }
@@ -616,13 +616,13 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
         uint32_t significant_bits = 0;
         bool started_significant = false;
 
-        while (ctx->buffer[ctx->cursor] == get_token_from_key('0', KEYMAP_MODE_LITERAL) ||
-            ctx->buffer[ctx->cursor] == get_token_from_key('1', KEYMAP_MODE_LITERAL)) {
+        while (ctx->buffer[ctx->cursor] == ZX_DIGIT_ZERO ||
+            ctx->buffer[ctx->cursor] == ZX_DIGIT_ONE) {
             char bit = ctx->buffer[ctx->cursor];
             ctx->cursor++;
             total_digits++;
 
-            if (bit == get_token_from_key('1', KEYMAP_MODE_LITERAL)) {
+            if (bit == ZX_DIGIT_ONE) {
                 started_significant = true;
             }
 
@@ -661,7 +661,7 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
             return err;
         }
         if (is_coordinate_function(token)) {
-            if (ctx->buffer[ctx->cursor] != get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+            if (ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_OPEN) {
                 err = ERR_C_NONSENSE_IN_BASIC;
                 goto error_cleanup;
             }
@@ -685,7 +685,7 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
             err = parse_expression(ctx, &arg2);
             if (err != ERR_0_OK) goto multi_arg_cleanup;
 
-            if (ctx->buffer[ctx->cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+            if (ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_CLOSE) {
                 err = ERR_C_NONSENSE_IN_BASIC;
                 goto multi_arg_cleanup;
             }
@@ -738,7 +738,7 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
         return machine_get_variable(ctx->machine, variable_name, indices, num_indices_passed, desired_len, out_value);
     }
 
-    if (token == get_token_from_key('"', KEYMAP_MODE_LITERAL)) {
+    if (token == ZX_CHAR_QUOTES) {
         size_t bytes_read;
         err = parse_string_literal(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, out_value, &bytes_read);
         if (err != ERR_0_OK) goto error_cleanup;
@@ -795,16 +795,16 @@ ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, si
     zx_skip_spaces(&ctx);
 
     // 2. Indien van toepassing: parse de indices via de interne helpers
-    if (strlen(out_var_name) == 2 && out_var_name[1] == get_token_from_key('$', KEYMAP_MODE_LITERAL)) {
+    if (strlen(out_var_name) == 2 && out_var_name[1] == ZX_CHAR_DOLLAR) {
         // String of String-array
-        if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+        if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == ZX_CHAR_BRACKET_OPEN) {
             ctx.cursor++; // Skip '('
             zx_skip_spaces(&ctx);
 
             err = parse_array_index_string(&ctx, out_indices, out_num_indices, out_desired_len);
             if (err != ERR_0_OK) return err;
 
-            if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+            if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != ZX_CHAR_BRACKET_CLOSE) {
                 return ERR_C_NONSENSE_IN_BASIC;
             }
             ctx.cursor++; // Skip ')'
@@ -813,7 +813,7 @@ ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, si
             // =========================================================================
             // DE KRONKEL-UPDATE: Gekoppelde slicing-notatie afvangen (bijv. A$(2)(7) of A$(2)(7 TO 9))
             // =========================================================================
-            while (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+            while (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == ZX_CHAR_BRACKET_OPEN) {
                 ctx.cursor++; // Skip de opeenvolgende '('
                 zx_skip_spaces(&ctx);
 
@@ -825,7 +825,7 @@ ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, si
                 err = parse_array_index_string(&ctx, next_indices, &next_num_indices, &next_desired_len);
                 if (err != ERR_0_OK) return err;
 
-                if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+                if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != ZX_CHAR_BRACKET_CLOSE) {
                     return ERR_C_NONSENSE_IN_BASIC;
                 }
                 ctx.cursor++; // Skip ')'
@@ -847,14 +847,14 @@ ZxError zx_parse_variable_reference(ZxMachine machine, const uint8_t *buffer, si
         }
     } else if (strlen(out_var_name) == 1) {
         // Numerieke array
-        if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+        if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == ZX_CHAR_BRACKET_OPEN) {
             ctx.cursor++; // Skip '('
             zx_skip_spaces(&ctx);
 
             err = parse_array_index_numeric(&ctx, out_indices, out_num_indices);
             if (err != ERR_0_OK) return err;
 
-            if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+            if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != ZX_CHAR_BRACKET_CLOSE) {
                 return ERR_C_NONSENSE_IN_BASIC;
             }
             ctx.cursor++; // Skip ')'
@@ -878,20 +878,20 @@ ZxError zx_parse_variable_for_dim(ZxMachine machine, const uint8_t *buffer, size
     ZxError err = parse_variable_name(ctx.buffer, ctx.size, out_var_name, &name_bytes);
     if (err != ERR_0_OK) return err;
     size_t name_len = strlen(out_var_name);
-    if ((name_len > 2) || (name_len == 2 && out_var_name[1] != get_token_from_key('$', KEYMAP_MODE_LITERAL))) {
+    if ((name_len > 2) || (name_len == 2 && out_var_name[1] != ZX_CHAR_DOLLAR)) {
         return ERR_C_NONSENSE_IN_BASIC;
     }
     ctx.cursor += name_bytes;
     zx_skip_spaces(&ctx);
 
-    if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == get_token_from_key('(', KEYMAP_MODE_LITERAL)) {
+    if (ctx.cursor < ctx.size && ctx.buffer[ctx.cursor] == ZX_CHAR_BRACKET_OPEN) {
         ctx.cursor++;
         zx_skip_spaces(&ctx);
 
         err = parse_array_index_numeric(&ctx, out_indices, out_num_indices);
         if (err != ERR_0_OK) return err;
 
-        if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != get_token_from_key(')', KEYMAP_MODE_LITERAL)) {
+        if (ctx.cursor >= ctx.size || ctx.buffer[ctx.cursor] != ZX_CHAR_BRACKET_CLOSE) {
             return ERR_C_NONSENSE_IN_BASIC;
         }
         ctx.cursor++;

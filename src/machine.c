@@ -55,6 +55,7 @@ typedef struct Machine {
 
     ZxStringSlot string_variables[26];
     ZxNumericArray numeric_arrays[26];
+    ZxLoopControl loops[26];
 
     NumericVariable *numeric_vars;
     int numeric_variable_count;
@@ -384,10 +385,11 @@ void machine_clear_variables(ZxMachine machine) {
     for (int i = 0; i < 26; i++) {
         zx_free_numeric_array(&machine->numeric_arrays[i]);
         zx_free_string_slot(&machine->string_variables[i]);
+        loop_init(&machine->loops[i]);
     }
 
 
-    //TODO: Counter
+
 }
 void machine_reset(ZxMachine machine) {
     if (machine == NULL) return;
@@ -724,4 +726,25 @@ ZxError machine_reserve_variable(ZxMachine machine, const char *var_name, const 
     if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
 
     return zx_dim_numeric_array(num_dimensions, dimension_sizes, &machine->numeric_arrays[i]);
+}
+//LoopControl
+ZxError machine_loop_set(ZxMachine machine, const char *var_name, const uint16_t return_line, const uint8_t return_statement, const double end_value, const double step_value) {
+    if (machine == NULL || var_name == NULL) return ERR_UNKNOWN;
+    if (strlen(var_name) != 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    int i = name_to_index((uint8_t)var_name[0]);
+    if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
+
+    loop_set(&machine->loops[i], return_line, return_statement, end_value, step_value);
+    return ERR_0_OK;
+}
+ZxError machine_loop_get(ZxMachine machine, const char *var_name, ZxLoopControl **out_loop_control) {
+    if (machine == NULL || var_name == NULL || out_loop_control == NULL) return ERR_UNKNOWN;
+    if (strlen(var_name) != 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    int i = name_to_index((uint8_t)var_name[0]);
+    if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
+
+    *out_loop_control = &machine->loops[i];
+    return ERR_0_OK;
 }

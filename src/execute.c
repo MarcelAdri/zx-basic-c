@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
+#include <sys/types.h>
 
 #include "errors.h"
 #include "machine.h"
@@ -59,6 +60,148 @@ static ZxError execute_cmd_dim(ZxMachine machine, const uint8_t *cmd, size_t out
     }
 
     return ERR_0_OK;
+}
+static ZxError execute_cmd_for(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    //Variable
+    char var_name[MAX_VAR_NAME_LEN] = {0};
+    uint16_t indices[10] = {0};
+    uint8_t num_indices = 0;
+    int32_t desired_len = 0;
+    size_t bytes_read = 0;
+
+    ZxError err = zx_parse_variable_reference(
+        machine, cmd + 1, output_size - 1, &bytes_read,
+        var_name, indices, &num_indices, &desired_len
+    );
+    if (err != ERR_0_OK) return err;
+    if (strlen(var_name) != 1 || num_indices != 0) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    size_t cursor = bytes_read + 1;
+
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+
+    // =
+    if (cursor >= output_size || cmd[cursor] != ZX_OP_EQUAL) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    cursor++;
+
+    //Startvalue
+    ZxValue value;
+    zx_init_value(&value);
+    err = solve_expression(machine, cmd + cursor, output_size - cursor, &value, &bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    cursor += bytes_read;
+    double start;
+    err = zx_get_number(value, &start);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    zx_free_string(&value);
+
+    // TO
+    if (cursor >= output_size || cmd[cursor] != ZX_TOKEN_TO) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    cursor++;
+
+    //Endvalue
+    err = solve_expression(machine, cmd + cursor, output_size - cursor, &value, &bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    cursor += bytes_read;
+    double end;
+    err = zx_get_number(value, &end);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    zx_free_string(&value);
+
+    //STEP
+    double step;
+    if (cursor >= output_size || cmd[cursor] != ZX_TOKEN_STEP) {
+        step = 1;
+    } else {
+        while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+        if (cursor >= output_size) {
+            return ERR_C_NONSENSE_IN_BASIC;
+        }
+        err = solve_expression(machine, cmd + cursor, output_size - cursor, &value, &bytes_read);
+        if (err != ERR_0_OK) {
+            zx_free_string(&value);
+            return err;
+        }
+        cursor += bytes_read;
+        err = zx_get_number(value, &step);
+        if (err != ERR_0_OK) {
+            zx_free_string(&value);
+            return err;
+        }
+        zx_free_string(&value);
+    }
+
+    uint16_t current_Line = machine_get_current_line(machine);
+    uint8_t current_statement = machine_get_current_statement(machine);
+    const uint8_t *line_buffer = NULL;
+    size_t line_size = 0;
+
+    //Eval false before start
+    if ((step >= 0 && start > end) || (step < 0 && start < end)) {
+        uint16_t search_line = current_Line;
+        uint8_t search_statement = current_statement + 1;
+        do {
+            if (search_line == 0) {
+                line_buffer = machine_get_direct_buffer(machine, &line_size);
+            } else {
+                line_buffer = machine_retrieve_program_line(machine, &search_line, &line_size);
+            }
+            const uint8_t *chunk = NULL;
+            size_t chunk_size = 0;
+            extract_statement(line_buffer, line_size, search_statement, &chunk, &chunk_size);
+            if (chunk == NULL) {
+                if (search_line == 0) {
+                    return ERR_I_NO_NEXT;
+                }
+                search_line++;
+                if (search_line > 9999) {
+                    return ERR_I_NO_NEXT;
+                }
+                continue;
+            }
+            if (chunk_size > 1) {
+                if (chunk[0] == ZX_STATEMENT_NEXT) {
+                    char next_var_name[MAX_VAR_NAME_LEN] = {0};
+                    size_t next_bytes_read = 0;
+                    err = parse_variable_name(chunk + 1, chunk_size - 1, next_var_name, &next_bytes_read);
+                    if (err != ERR_0_OK) continue;
+                    if (strcmp(next_var_name, var_name) == 0) {
+                        machine_set_current_line(machine, search_line);
+                        machine_set_current_statement(machine, search_statement);
+                        return ERR_0_OK;
+                    }
+                }
+            }
+        } while (true);
+    }
+
+    err = zx_assign_number(start, &value);
+    if (err != ERR_0_OK) return err;
+
+    err = machine_set_variable(machine, var_name, NULL, 0, 0, value);
+    if (err != ERR_0_OK) return err;
+    zx_free_string(&value);
+
+    return machine_loop_set(machine, var_name, current_Line, current_statement + 1, end, step );
 }
 static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
@@ -183,6 +326,67 @@ static ZxError execute_cmd_load(ZxMachine machine, const uint8_t *cmd, size_t ou
         return ERR_F_INVALID_FILENAME;
     }
     UI_trigger_load(machine);
+    return ERR_0_OK;
+}
+static ZxError execute_cmd_next(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size < 2) return ERR_C_NONSENSE_IN_BASIC;
+
+    //Variable
+    char var_name[MAX_VAR_NAME_LEN] = {0};
+    uint16_t indices[10] = {0};
+    uint8_t num_indices = 0;
+    int32_t desired_len = 0;
+    size_t bytes_read = 0;
+
+    ZxError err = zx_parse_variable_reference(
+        machine, cmd + 1, output_size - 1, &bytes_read,
+        var_name, indices, &num_indices, &desired_len
+    );
+    if (err != ERR_0_OK) return err;
+    if (strlen(var_name) != 1 || num_indices != 0) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    size_t cursor = bytes_read + 1;
+
+    //Countervalue
+    ZxValue value;
+    zx_init_value(&value);
+    err = machine_get_variable(machine, var_name, NULL, 0, 0, &value);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    double counter;
+    err = zx_get_number(value, &counter);
+    zx_free_string(&value);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+
+    //Loopcontrol
+    ZxLoopControl *loop = NULL;
+    err = machine_loop_get(machine, var_name, &loop);
+    if (err != ERR_0_OK) return err;
+
+    if (loop->return_statement == 0) return ERR_1_NEXT_WITHOUT_FOR;
+
+    //Variable update
+    counter += loop->step_value;
+    err = zx_assign_number(counter, &value);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    err = machine_set_variable(machine, var_name, NULL, 0, 0, value);
+    zx_free_string(&value);
+    if (err != ERR_0_OK) return err;
+
+    //Counter eval
+    if ((loop->step_value >= 0 && counter > loop->end_value) || (loop->step_value < 0 && counter < loop->end_value)) return ERR_0_OK;
+
+    machine_set_current_line(machine, loop->return_line);
+    machine_set_current_statement(machine, loop->return_statement);
+
     return ERR_0_OK;
 }
 static ZxError execute_cmd_new(ZxMachine machine) {
@@ -533,6 +737,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_cls(machine);
         case ZX_STATEMENT_DIM:
             return execute_cmd_dim(machine, input, input_size);
+        case ZX_STATEMENT_FOR:
+            return execute_cmd_for(machine, input, input_size);
         case ZX_STATEMENT_GO_TO:
             return execute_cmd_go_to(machine, input, input_size);
         case ZX_STATEMENT_LET:
@@ -541,6 +747,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_list(machine, input, input_size);
         case ZX_STATEMENT_LOAD:
             return execute_cmd_load(machine, input, input_size);
+        case ZX_STATEMENT_NEXT:
+            return execute_cmd_next(machine, input, input_size);
         case ZX_STATEMENT_NEW:
             if (input_size != 1) {
                 return ERR_C_NONSENSE_IN_BASIC;
@@ -575,7 +783,6 @@ ZxError execute_single_step(ZxMachine machine) {
     } else {
         line_buffer = machine_retrieve_program_line(machine, &current_line, &line_size);
 
-        // BUGFIX 1: Synchroniseer de eventueel vooruitgespoelde regel direct terug naar de machine!
         machine_set_current_line(machine, current_line);
     }
 
@@ -623,7 +830,9 @@ ZxError execute_single_step(ZxMachine machine) {
         chunk[0] != ZX_STATEMENT_RUN &&
         chunk[0] != ZX_STATEMENT_GO_TO &&
         chunk[0] != ZX_STATEMENT_GO_SUB &&
-        chunk[0] != ZX_STATEMENT_RETURN)
+        chunk[0] != ZX_STATEMENT_RETURN &&
+        chunk[0] != ZX_STATEMENT_NEXT &&
+        chunk[0] != ZX_STATEMENT_FOR)
     {
         machine_set_current_statement(machine, current_statement + 1);
     }

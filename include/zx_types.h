@@ -58,6 +58,13 @@ typedef struct {
     double value;
 } NumericVariable;
 
+typedef struct {
+    uint16_t return_line;
+    uint8_t return_statement;
+    double end_value;
+    double step_value;
+} ZxLoopControl;
+
 void zx_init_value(ZxValue *val);
 ZxError zx_assign_string(const uint8_t *text, size_t length, ZxValue *val);
 ZxError zx_assign_number(double num, ZxValue *val);
@@ -77,5 +84,7 @@ void zx_free_string_slot(ZxStringSlot *slot);
 ZxError zx_dim_string_slot(uint8_t num_dimensions, const uint16_t *dimension_sizes, ZxStringSlot *slot);
 ZxError zx_get_string_element(const ZxStringSlot *slot, const uint16_t *indices, uint8_t num_indices_passed, int32_t desired_len, ZxValue *val);
 ZxError zx_set_string_element(ZxStringSlot* slot, const uint16_t* indices, size_t num_indices_passed, int32_t desired_len, ZxValue val);
+void loop_init(ZxLoopControl *loop_control);
+void loop_set(ZxLoopControl *loop_control, uint16_t return_line, uint8_t return_statement, double end_value, double step_value);
 
 #endif //ZX_BASIC_C_ZX_TYPES_H

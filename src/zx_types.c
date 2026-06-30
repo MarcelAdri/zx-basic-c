@@ -553,3 +553,17 @@ ZxError zx_set_string_element(ZxStringSlot* slot, const uint16_t* indices, const
 
     return ERR_0_OK;
 }
+
+//LoopControl
+void loop_init(ZxLoopControl *loop_control) {
+    loop_control->return_line = 0;
+    loop_control->return_statement = 0;
+    loop_control->end_value = 0;
+    loop_control->step_value = 0;
+}
+void loop_set(ZxLoopControl *loop_control, const uint16_t return_line, const uint8_t return_statement, const double end_value, const double step_value) {
+    loop_control->return_line = return_line;
+    loop_control->return_statement = return_statement;
+    loop_control->end_value = end_value;
+    loop_control->step_value = step_value;
+}

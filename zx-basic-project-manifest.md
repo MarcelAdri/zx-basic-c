@@ -106,7 +106,7 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
 | 232   | CONTINUE     |                        |                          | TODO                                  |
 | 233   | DIM          | ZX_STATEMENT_DIM       | execute_cmd_dim          |                                       |
 | 234   | REM          | ZX_STATEMENT_REM       | extract_statement        |                                       |
-| 235   | FOR          |                        |                          | TODO                                  |
+| 235   | FOR          | ZX_STATEMENT_FOR       | execute_cmd_for          |                                       |
 | 236   | GO TO        | ZX_STATEMENT_GO_TO     | execute_cmd_go_to        |                                       |
 | 237   | GO SUB       | ZX_STATEMENT_GO_SUB    |                          | TODO                                  |
 | 238   | INPUT        |                        |                          | TODO                                  |
@@ -114,7 +114,7 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
 | 240   | LIST         | ZX_STATEMENT_LIST      | execute_cmd_list         |                                       |
 | 241   | LET          | ZX_STATEMENT_LET       | execute_cmd_let          |                                       |
 | 242   | PAUSE        | ZX_STATEMENT_PAUSE     | execute_cmd_pause        |                                       |
-| 243   | NEXT         |                        |                          | TODO                                  |
+| 243   | NEXT         | ZX_STATEMENT_NEXT      | execute_cmd_next         |                                       |
 | 244   | POKE         |                        |                          | TODO                                  |
 | 245   | PRINT        | ZX_STATEMENT_PRINT     | execute_cmd_print        |                                       |
 | 246   | PLOT         |                        |                          | TODO                                  |

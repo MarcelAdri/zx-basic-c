@@ -132,6 +132,7 @@ static ZxError execute_cmd_for(ZxMachine machine, const uint8_t *cmd, size_t out
     if (cursor >= output_size || cmd[cursor] != ZX_TOKEN_STEP) {
         step = 1;
     } else {
+        cursor++;
         while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
         if (cursor >= output_size) {
             return ERR_C_NONSENSE_IN_BASIC;
@@ -235,6 +236,58 @@ static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t o
     machine_set_state(machine, ZX_STATE_RUNNING);
     zx_free_string(&line_number);
     return ERR_0_OK;
+}
+static ZxError execute_cmd_if(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    //eval
+    ZxValue eval;
+    zx_init_value(&eval);
+    size_t bytes_read = 0;
+    ZxError err = solve_expression(machine, cmd + 1, output_size - 1, &eval, &bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&eval);
+        return err;
+    }
+    size_t cursor = bytes_read + 1;
+    double eval_value = 0.0;
+    err = zx_get_number(eval, &eval_value);
+    zx_free_string(&eval);
+    if (err != ERR_0_OK) return err;
+
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+    if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+    //THEN
+    if (cmd[cursor] != ZX_TOKEN_THEN) return ERR_C_NONSENSE_IN_BASIC;
+    cursor++;
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+    if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+    //false
+    if (eval_value == 0.0) {
+        machine_set_current_statement(machine, 255);
+        return ERR_0_OK;
+    }
+
+    //true
+    //line number
+    if (is_zx_number_character(cmd[cursor])) {
+        err=parse_number_to_double(cmd + cursor, output_size - cursor, &eval, &bytes_read);
+        zx_free_string(&eval);
+        if (err != ERR_0_OK) return err;
+
+        size_t check_cursor = cursor + bytes_read;
+        while (check_cursor < output_size) {
+            if (!is_zx_space(cmd[check_cursor])) {
+                return ERR_C_NONSENSE_IN_BASIC; 
+            }
+            check_cursor++;
+        }
+        return execute_cmd_go_to(machine, (cmd + cursor) - 1, (output_size - cursor) + 1);
+    }
+    return execute(machine, cmd + cursor, output_size - cursor);
+
 }
 static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
@@ -741,6 +794,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_for(machine, input, input_size);
         case ZX_STATEMENT_GO_TO:
             return execute_cmd_go_to(machine, input, input_size);
+        case ZX_STATEMENT_IF:
+            return execute_cmd_if(machine, input, input_size);
         case ZX_STATEMENT_LET:
             return execute_cmd_let(machine, input, input_size);
         case ZX_STATEMENT_LIST:
@@ -823,18 +878,21 @@ ZxError execute_single_step(ZxMachine machine) {
     }
 
     // 5. Voer het hapklare brok uit!
+    uint16_t line_before = machine_get_current_line(machine);
+    uint8_t stmt_before = machine_get_current_statement(machine);
     ZxError err = execute(machine, chunk, chunk_size);
 
     // 6. De administratie: Schuif de pointer op voor de volgende ronde!
-    if (err == ERR_0_OK &&
-        chunk[0] != ZX_STATEMENT_RUN &&
-        chunk[0] != ZX_STATEMENT_GO_TO &&
-        chunk[0] != ZX_STATEMENT_GO_SUB &&
-        chunk[0] != ZX_STATEMENT_RETURN &&
-        chunk[0] != ZX_STATEMENT_NEXT &&
-        chunk[0] != ZX_STATEMENT_FOR)
-    {
-        machine_set_current_statement(machine, current_statement + 1);
+    if (err == ERR_0_OK) {
+        // Haal de coördinaten op NA het uitvoeren van het statement
+        uint16_t line_after = machine_get_current_line(machine);
+        uint8_t stmt_after = machine_get_current_statement(machine);
+
+        // Dynamic Check: Alleen ophogen als het commando NIET zelf
+        // aan de regel- of statementknoppen heeft gezeten!
+        if (line_before == line_after && stmt_before == stmt_after) {
+            machine_set_current_statement(machine, current_statement + 1);
+        }
     }
 
     uint8_t pressed_key = machine_get_pressed_key(machine);

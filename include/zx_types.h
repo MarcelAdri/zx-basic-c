@@ -13,7 +13,6 @@
 #define ZX_FALSE 0.0
 #define MAX_VAR_NAME_LEN 100
 
-
 typedef enum {
     ZX_TYPE_NUMBER,
     ZX_TYPE_STRING,
@@ -65,6 +64,11 @@ typedef struct {
     double step_value;
 } ZxLoopControl;
 
+typedef struct {
+    uint16_t return_line;
+    uint8_t return_statement;
+} ZxGoSub;
+
 void zx_init_value(ZxValue *val);
 ZxError zx_assign_string(const uint8_t *text, size_t length, ZxValue *val);
 ZxError zx_assign_number(double num, ZxValue *val);
@@ -86,5 +90,6 @@ ZxError zx_get_string_element(const ZxStringSlot *slot, const uint16_t *indices,
 ZxError zx_set_string_element(ZxStringSlot* slot, const uint16_t* indices, size_t num_indices_passed, int32_t desired_len, ZxValue val);
 void loop_init(ZxLoopControl *loop_control);
 void loop_set(ZxLoopControl *loop_control, uint16_t return_line, uint8_t return_statement, double end_value, double step_value);
+void set_go_sub_stack(ZxGoSub *go_sub_stack, uint16_t line, uint8_t statement);
 
 #endif //ZX_BASIC_C_ZX_TYPES_H

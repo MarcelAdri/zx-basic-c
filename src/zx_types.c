@@ -567,3 +567,8 @@ void loop_set(ZxLoopControl *loop_control, const uint16_t return_line, const uin
     loop_control->end_value = end_value;
     loop_control->step_value = step_value;
 }
+//GO SUB
+void set_go_sub_stack(ZxGoSub *go_sub_stack, const uint16_t line, const uint8_t statement) {
+    go_sub_stack->return_line = line;
+    go_sub_stack->return_statement = statement;
+}

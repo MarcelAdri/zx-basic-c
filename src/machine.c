@@ -50,6 +50,9 @@ typedef struct Machine {
     uint16_t old_line;
     uint8_t old_statement;
 
+    ZxGoSub go_sub_stack[MAX_GO_SUB_STACK_SIZE];
+    uint8_t go_sub_stack_index;
+
     uint8_t direct_buffer[2048];
     size_t direct_length;
 
@@ -388,7 +391,7 @@ void machine_clear_variables(ZxMachine machine) {
         loop_init(&machine->loops[i]);
     }
 
-
+    machine->go_sub_stack_index = 0;
 
 }
 void machine_reset(ZxMachine machine) {
@@ -746,5 +749,22 @@ ZxError machine_loop_get(ZxMachine machine, const char *var_name, ZxLoopControl 
     if (i == NOT_FOUND) return ERR_C_NONSENSE_IN_BASIC;
 
     *out_loop_control = &machine->loops[i];
+    return ERR_0_OK;
+}
+//GO SUB
+ZxError machine_push_go_sub_stack(ZxMachine machine, const uint16_t line_number, const uint8_t statement) {
+    if (machine == NULL) return ERR_UNKNOWN;
+    if (machine->go_sub_stack_index >= MAX_GO_SUB_STACK_SIZE) return ERR_4_OUT_OF_MEMORY;
+    machine->go_sub_stack[machine->go_sub_stack_index].return_line = line_number;
+    machine->go_sub_stack[machine->go_sub_stack_index].return_statement = statement;
+    machine->go_sub_stack_index++;
+    return ERR_0_OK;
+}
+ZxError machine_pop_go_sub_stack(ZxMachine machine, uint16_t *out_line, uint8_t *out_statement) {
+    if (machine == NULL || out_line == NULL || out_statement == NULL) return ERR_UNKNOWN;
+    if (machine->go_sub_stack_index == 0) return ERR_7_NO_GOSUB;
+    machine->go_sub_stack_index--;
+    *out_line = machine->go_sub_stack[machine->go_sub_stack_index].return_line;
+    *out_statement = machine->go_sub_stack[machine->go_sub_stack_index].return_statement;
     return ERR_0_OK;
 }

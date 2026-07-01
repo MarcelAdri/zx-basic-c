@@ -10,6 +10,7 @@
 
 #define MAX_TEXT_SENTENCE_LEN 256
 #define MAX_TOKEN_SENTENCE_LEN 200
+#define MAX_GO_SUB_STACK_SIZE 100
 
 typedef struct Machine* ZxMachine;
 typedef void (*ZxPrintCallback)(const char *text);
@@ -91,5 +92,7 @@ ZxError machine_set_variable(ZxMachine machine, const char *var_name, const uint
 ZxError machine_reserve_variable(ZxMachine machine, const char *var_name, const uint16_t *dimension_sizes, uint8_t num_dimensions);
 ZxError machine_loop_set(ZxMachine machine, const char *var_name, uint16_t return_line, uint8_t return_statement, double end_value, double step_value);
 ZxError machine_loop_get(ZxMachine machine, const char *var_name, ZxLoopControl **out_loop_control);
+ZxError machine_push_go_sub_stack(ZxMachine machine, uint16_t line_number, uint8_t statement);
+ZxError machine_pop_go_sub_stack(ZxMachine machine, uint16_t *out_line, uint8_t *out_statement);
 
 #endif //ZX_BASIC_C_MACHINE_H

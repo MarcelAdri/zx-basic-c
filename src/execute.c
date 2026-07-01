@@ -204,7 +204,7 @@ static ZxError execute_cmd_for(ZxMachine machine, const uint8_t *cmd, size_t out
 
     return machine_loop_set(machine, var_name, current_Line, current_statement + 1, end, step );
 }
-static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+static ZxError execute_cmd_go(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) {
         return ERR_C_NONSENSE_IN_BASIC;
     }
@@ -230,6 +230,13 @@ static ZxError execute_cmd_go_to(ZxMachine machine, const uint8_t *cmd, size_t o
     if (line_number_value < 1 || line_number_value > 9999) {
         zx_free_string(&line_number);
         return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
+    if (cmd[0] == ZX_STATEMENT_GO_SUB) {
+        err = machine_push_go_sub_stack(machine, machine_get_current_line(machine), machine_get_current_statement(machine) + 1);
+        if (err != ERR_0_OK) {
+            zx_free_string(&line_number);
+            return err;
+        }
     }
     machine_set_current_line(machine, (uint16_t)line_number_value);
     machine_set_current_statement(machine, 1);
@@ -284,7 +291,7 @@ static ZxError execute_cmd_if(ZxMachine machine, const uint8_t *cmd, size_t outp
             }
             check_cursor++;
         }
-        return execute_cmd_go_to(machine, (cmd + cursor) - 1, (output_size - cursor) + 1);
+        return execute_cmd_go(machine, (cmd + cursor) - 1, (output_size - cursor) + 1);
     }
     return execute(machine, cmd + cursor, output_size - cursor);
 
@@ -700,6 +707,15 @@ static ZxError execute_cmd_randomize(ZxMachine machine, const uint8_t *cmd, size
 
     return ERR_0_OK;
 }
+static ZxError execute_cmd_return(ZxMachine machine) {
+    uint16_t return_line;
+    uint8_t return_statement;
+    ZxError err = machine_pop_go_sub_stack(machine, &return_line, &return_statement);
+    if (err != ERR_0_OK) return err;
+    machine_set_current_line(machine, return_line);
+    machine_set_current_statement(machine, return_statement);
+    return ERR_0_OK;
+}
 static ZxError execute_cmd_run(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     machine_clear_variables(machine);
 
@@ -793,7 +809,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
         case ZX_STATEMENT_FOR:
             return execute_cmd_for(machine, input, input_size);
         case ZX_STATEMENT_GO_TO:
-            return execute_cmd_go_to(machine, input, input_size);
+        case ZX_STATEMENT_GO_SUB:
+            return execute_cmd_go(machine, input, input_size);
         case ZX_STATEMENT_IF:
             return execute_cmd_if(machine, input, input_size);
         case ZX_STATEMENT_LET:
@@ -817,6 +834,11 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_randomize(machine, input, input_size);
         case ZX_STATEMENT_REM:
             return ERR_0_OK;
+        case ZX_STATEMENT_RETURN:
+            if (input_size != 1) {
+                return ERR_C_NONSENSE_IN_BASIC;
+            }
+            return execute_cmd_return(machine);
         case ZX_STATEMENT_RUN:
             return execute_cmd_run(machine, input, input_size);
         case ZX_STATEMENT_SAVE:

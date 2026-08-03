@@ -56,6 +56,10 @@ static ZxError zx_make_number(double val, ZxValue *out_value) {
     return ERR_0_OK;
 }
 
+ZxValueType type_of(const ZxValue val) {
+    return val.type;
+}
+
 ZxError zx_get_number(const ZxValue val, double *out_val) {
     if (val.type != ZX_TYPE_NUMBER) {
         return ERR_C_NONSENSE_IN_BASIC;

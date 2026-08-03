@@ -804,6 +804,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
                 return ERR_C_NONSENSE_IN_BASIC;
             }
             return execute_cmd_cls(machine);
+        case ZX_STATEMENT_DEF_FN:
+            return ERR_0_OK;
         case ZX_STATEMENT_DIM:
             return execute_cmd_dim(machine, input, input_size);
         case ZX_STATEMENT_FOR:

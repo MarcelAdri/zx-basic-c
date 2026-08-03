@@ -16,9 +16,14 @@
 
   // Note: We use a typeof check here instead of optional chaining using
   // globalThis because older browsers might not have globalThis defined.
-  var currentNodeVersion = typeof process !== 'undefined' && process.versions?.node ? humanReadableVersionToPacked(process.versions.node) : TARGET_NOT_SUPPORTED;
-  if (currentNodeVersion < 180300) {
-    throw new Error(`This emscripten-generated code requires node v${ packedVersionToHumanReadable(180300) } (detected v${packedVersionToHumanReadable(currentNodeVersion)})`);
+
+  // We skip the node version checking when running on Bun/Deno since the node
+  // version they report doesn't seem to be useful.
+  if (typeof process !== 'undefined' && !process.versions?.bun && typeof Deno == "undefined") {
+    var currentNodeVersion = process.versions?.node ? humanReadableVersionToPacked(process.versions.node) : TARGET_NOT_SUPPORTED;
+    if (currentNodeVersion < 180300) {
+      throw new Error(`This emscripten-generated code requires node v${ packedVersionToHumanReadable(180300) } (detected v${packedVersionToHumanReadable(currentNodeVersion)})`);
+    }
   }
 
   var userAgent = typeof navigator !== 'undefined' && navigator.userAgent;
@@ -282,44 +287,6 @@ function assert(condition, text) {
 var isFileURI = (filename) => filename.startsWith('file://');
 
 // include: runtime_common.js
-// include: runtime_stack_check.js
-// Initializes the stack cookie. Called at the startup of main and at the startup of each thread in pthreads mode.
-function writeStackCookie() {
-  var max = _emscripten_stack_get_end();
-  assert((max & 3) == 0);
-  // If the stack ends at address zero we write our cookies 4 bytes into the
-  // stack.  This prevents interference with SAFE_HEAP and ASAN which also
-  // monitor writes to address zero.
-  if (max == 0) {
-    max += 4;
-  }
-  // The stack grow downwards towards _emscripten_stack_get_end.
-  // We write cookies to the final two words in the stack and detect if they are
-  // ever overwritten.
-  HEAPU32[((max)>>2)] = 0x02135467;
-  HEAPU32[(((max)+(4))>>2)] = 0x89BACDFE;
-  // Also test the global address 0 for integrity.
-  HEAPU32[((0)>>2)] = 1668509029;
-}
-
-function checkStackCookie() {
-  if (ABORT) return;
-  var max = _emscripten_stack_get_end();
-  // See writeStackCookie().
-  if (max == 0) {
-    max += 4;
-  }
-  var cookie1 = HEAPU32[((max)>>2)];
-  var cookie2 = HEAPU32[(((max)+(4))>>2)];
-  if (cookie1 != 0x02135467 || cookie2 != 0x89BACDFE) {
-    abort(`Stack overflow! Stack cookie has been overwritten at ${ptrToString(max)}, expected hex dwords 0x89BACDFE and 0x2135467, but received ${ptrToString(cookie2)} ${ptrToString(cookie1)}`);
-  }
-  // Also test the global address 0 for integrity.
-  if (HEAPU32[((0)>>2)] != 0x63736d65 /* 'emsc' */) {
-    abort('Runtime error: The application has corrupted its heap memory area (address zero)!');
-  }
-}
-// end include: runtime_stack_check.js
 // include: runtime_exceptions.js
 // Base Emscripten EH error class
 class EmscriptenEH {}
@@ -468,6 +435,51 @@ function unexportedRuntimeSymbol(sym) {
 }
 
 // end include: runtime_debug.js
+// include: runtime_stack_check.js
+const stackCookie1 = 0x02135467;
+const stackCookie2 = 0x89BACDFE;
+
+// Initializes the stack cookie. Called at the startup of main and at the startup of each thread in pthreads mode.
+function writeStackCookie() {
+  var max = _emscripten_stack_get_end();
+  assert((max & 3) == 0);
+  // If the stack ends at address zero we write our cookies 4 bytes into the
+  // stack.  This prevents interference with SAFE_HEAP and ASAN which also
+  // monitor writes to address zero.
+  if (max == 0) {
+    max += 4;
+  }
+  // The stack grow downwards towards _emscripten_stack_get_end.
+  // We write cookies to the final two words in the stack and detect if they are
+  // ever overwritten.
+  HEAPU32[((max)>>2)] = stackCookie1;
+  HEAPU32[(((max)+(4))>>2)] = stackCookie2;
+  // Also test the global address 0 for integrity.
+  HEAPU32[((0)>>2)] = 1668509029;
+}
+
+function u32ToHexString(num) {
+  return '0x' + (num >>> 0).toString(16).padStart(8, '0');
+}
+
+function checkStackCookie() {
+  if (ABORT) return;
+  var max = _emscripten_stack_get_end();
+  // See writeStackCookie().
+  if (max == 0) {
+    max += 4;
+  }
+  var val1 = HEAPU32[((max)>>2)];
+  var val2 = HEAPU32[(((max)+(4))>>2)];
+  if (val1 != stackCookie1 || val2 != stackCookie2) {
+    abort(`Stack overflow! Stack cookie has been overwritten at ${ptrToString(max)}, expected hex dwords ${u32ToHexString(stackCookie2)} and ${u32ToHexString(stackCookie1)}, but received ${u32ToHexString(val2)} ${u32ToHexString(val1)}`);
+  }
+  // Also test the global address 0 for integrity.
+  if (HEAPU32[((0)>>2)] != 0x63736d65 /* 'emsc' */) {
+    abort('Runtime error: The application has corrupted its heap memory area (address zero)!');
+  }
+}
+// end include: runtime_stack_check.js
 // Memory management
 
 var runtimeInitialized = false;
@@ -479,15 +491,15 @@ function updateMemoryViews() {
   assert(!HEAP8, 'updateMemoryViews should only be called once when ALLOW_MEMORY_GROWTH=0');
   var b = wasmMemory.buffer;
   HEAP8 = new Int8Array(b);
-  HEAP16 = new Int16Array(b);
+  
   Module['HEAPU8'] = HEAPU8 = new Uint8Array(b);
-  HEAPU16 = new Uint16Array(b);
+  
   HEAP32 = new Int32Array(b);
   HEAPU32 = new Uint32Array(b);
-  HEAPF32 = new Float32Array(b);
-  HEAPF64 = new Float64Array(b);
-  HEAP64 = new BigInt64Array(b);
-  HEAPU64 = new BigUint64Array(b);
+  
+  
+  
+  
 }
 
 // include: memoryprofiler.js
@@ -497,11 +509,10 @@ assert(globalThis.Int32Array && globalThis.Float64Array && Int32Array.prototype.
        'JS engine does not provide full typed array support');
 
 function preRun() {
-  if (Module['preRun']) {
-    if (typeof Module['preRun'] == 'function') Module['preRun'] = [Module['preRun']];
-    while (Module['preRun'].length) {
-      addOnPreRun(Module['preRun'].shift());
-    }
+  var preRun = Module['preRun'];
+  if (preRun) {
+    if (typeof preRun == 'function') preRun = [preRun];
+    onPreRuns.push(...preRun);
   }
   consumedModuleProp('preRun');
   // Begin ATPRERUNS hooks
@@ -520,22 +531,17 @@ function initRuntime() {
   wasmExports['__wasm_call_ctors']();
 
   // No ATPOSTCTORS hooks
-}
 
-function preMain() {
   checkStackCookie();
-  // No ATMAINS hooks
 }
 
 function postRun() {
   checkStackCookie();
-   // PThreads reuse the runtime from the main thread.
 
-  if (Module['postRun']) {
-    if (typeof Module['postRun'] == 'function') Module['postRun'] = [Module['postRun']];
-    while (Module['postRun'].length) {
-      addOnPostRun(Module['postRun'].shift());
-    }
+  var postRun = Module['postRun'];
+  if (postRun) {
+    if (typeof postRun == 'function') postRun = [postRun];
+    onPostRuns.push(...postRun);
   }
   consumedModuleProp('postRun');
 
@@ -596,14 +602,13 @@ var FS = {
 };
 
 
-function createExportWrapper(name, nargs) {
+function createExportWrapper(name, func, nargs) {
+  assert(func);
   return (...args) => {
     assert(runtimeInitialized, `native function \`${name}\` called before runtime initialization`);
-    var f = wasmExports[name];
-    assert(f, `exported native function \`${name}\` not found`);
     // Only assert for too many arguments. Too few can be valid since the missing arguments will be zero filled.
     assert(args.length <= nargs, `native function \`${name}\` called with ${args.length} args but expects ${nargs}`);
-    return f(...args);
+    return func(...args);
   };
 }
 
@@ -614,9 +619,6 @@ function findWasmBinary() {
 }
 
 function getBinarySync(file) {
-  if (file == wasmBinaryFile && wasmBinary) {
-    return new Uint8Array(wasmBinary);
-  }
   if (readBinary) {
     return readBinary(file);
   }
@@ -699,8 +701,7 @@ async function createWasm() {
   // Load the wasm module and create an instance of using native support in the JS engine.
   // handle a generated wasm instance, receiving its exports and
   // performing other necessary setup
-  /** @param {WebAssembly.Module=} module*/
-  function receiveInstance(instance, module) {
+  function receiveInstance(instance) {
     wasmExports = instance.exports;
 
     assignWasmExports(wasmExports);
@@ -733,15 +734,14 @@ async function createWasm() {
   // performing.
   // Also pthreads and wasm workers initialize the wasm instance through this
   // path.
-  if (Module['instantiateWasm']) {
-    return new Promise((resolve, reject) => {
+  var instantiateWasm = Module['instantiateWasm'];
+  if (instantiateWasm) {
+    return new Promise((resolve) => {
       try {
-        Module['instantiateWasm'](info, (inst, mod) => {
-          resolve(receiveInstance(inst, mod));
-        });
+        instantiateWasm(info, (inst) => resolve(receiveInstance(inst)));
       } catch(e) {
         err(`Module.instantiateWasm callback failed with error: ${e}`);
-        reject(e);
+        throw e;
       }
     });
   }
@@ -765,35 +765,14 @@ async function createWasm() {
       }
     }
 
-  /** @type {!Int16Array} */
-  var HEAP16;
-
   /** @type {!Int32Array} */
   var HEAP32;
-
-  /** not-@type {!BigInt64Array} */
-  var HEAP64;
 
   /** @type {!Int8Array} */
   var HEAP8;
 
-  /** @type {!Float32Array} */
-  var HEAPF32;
-
-  /** @type {!Float64Array} */
-  var HEAPF64;
-
-  /** @type {!Uint16Array} */
-  var HEAPU16;
-
   /** @type {!Uint32Array} */
   var HEAPU32;
-
-  /** not-@type {!BigUint64Array} */
-  var HEAPU64;
-
-  /** @type {!Uint8Array} */
-  var HEAPU8;
 
   var callRuntimeCallbacks = (callbacks) => {
       while (callbacks.length > 0) {
@@ -808,26 +787,6 @@ async function createWasm() {
   var addOnPreRun = (cb) => onPreRuns.push(cb);
 
 
-  
-    /**
-   * @param {number} ptr
-   * @param {string} type
-   */
-  function getValue(ptr, type = 'i8') {
-    if (type.endsWith('*')) type = '*';
-    switch (type) {
-      case 'i1': return HEAP8[ptr];
-      case 'i8': return HEAP8[ptr];
-      case 'i16': return HEAP16[((ptr)>>1)];
-      case 'i32': return HEAP32[((ptr)>>2)];
-      case 'i64': return HEAP64[((ptr)>>3)];
-      case 'float': return HEAPF32[((ptr)>>2)];
-      case 'double': return HEAPF64[((ptr)>>3)];
-      case '*': return HEAPU32[((ptr)>>2)];
-      default: abort(`invalid type for getValue: ${type}`);
-    }
-  }
-
   var noExitRuntime = true;
 
   function ptrToString(ptr) {
@@ -836,27 +795,6 @@ async function createWasm() {
       ptr >>>= 0;
       return '0x' + ptr.toString(16).padStart(8, '0');
     }
-
-  
-    /**
-   * @param {number} ptr
-   * @param {number} value
-   * @param {string} type
-   */
-  function setValue(ptr, value, type = 'i8') {
-    if (type.endsWith('*')) type = '*';
-    switch (type) {
-      case 'i1': HEAP8[ptr] = value; break;
-      case 'i8': HEAP8[ptr] = value; break;
-      case 'i16': HEAP16[((ptr)>>1)] = value; break;
-      case 'i32': HEAP32[((ptr)>>2)] = value; break;
-      case 'i64': HEAP64[((ptr)>>3)] = BigInt(value); break;
-      case 'float': HEAPF32[((ptr)>>2)] = value; break;
-      case 'double': HEAPF64[((ptr)>>3)] = value; break;
-      case '*': HEAPU32[((ptr)>>2)] = value; break;
-      default: abort(`invalid type for setValue: ${type}`);
-    }
-  }
 
   var stackRestore = (val) => __emscripten_stack_restore(val);
 
@@ -875,6 +813,14 @@ async function createWasm() {
 
   var UTF8Decoder = globalThis.TextDecoder && new TextDecoder();
   
+  
+    /**
+   * heapOrArray is either a regular array, or a JavaScript typed array view.
+   * @param {number} idx
+   * @param {number=} maxBytesToRead
+   * @param {boolean=} ignoreNul
+   * @return {number}
+   */
   var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
       var maxIdx = idx + maxBytesToRead;
       if (ignoreNul) return maxIdx;
@@ -933,6 +879,9 @@ async function createWasm() {
       return str;
     };
   
+  /** @type {!Uint8Array} */
+  var HEAPU8;
+  
     /**
    * Given a pointer 'ptr' to a null-terminated UTF8-encoded string in the
    * emscripten HEAP, returns a copy of that string as a Javascript String object.
@@ -959,6 +908,7 @@ async function createWasm() {
   var abortOnCannotGrowMemory = (requestedSize) => {
       abort(`Cannot enlarge memory arrays to size ${requestedSize} bytes (OOM). Either (1) compile with -sINITIAL_MEMORY=X with X higher than the current value ${HEAP8.length}, (2) compile with -sALLOW_MEMORY_GROWTH which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with -sABORTING_MALLOC=0`);
     };
+  
   var _emscripten_resize_heap = (requestedSize) => {
       var oldSize = HEAPU8.length;
       // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
@@ -1042,10 +992,12 @@ async function createWasm() {
       heap[outIdx] = 0;
       return outIdx - startIdx;
     };
+  
   var stringToUTF8 = (str, outPtr, maxBytesToWrite) => {
       assert(typeof maxBytesToWrite == 'number', 'stringToUTF8 requires a third parameter that specifies the length of the output buffer');
       return stringToUTF8Array(str, HEAPU8, outPtr, maxBytesToWrite);
     };
+  
   var _environ_get = (__environ, environ_buf) => {
       var bufSize = 0;
       var envp = 0;
@@ -1079,6 +1031,7 @@ async function createWasm() {
       }
       return len;
     };
+  
   var _environ_sizes_get = (penviron_count, penviron_buf_size) => {
       var strings = getEnvStrings();
       HEAPU32[((penviron_count)>>2)] = strings.length;
@@ -1132,6 +1085,8 @@ async function createWasm() {
       if (printCharBuffers[1].length) printChar(1, 10);
       if (printCharBuffers[2].length) printChar(2, 10);
     };
+  
+  
   
   
   var _fd_write = (fd, iov, iovcnt, pnum) => {
@@ -1195,6 +1150,7 @@ async function createWasm() {
       }
       quit_(1, e);
     };
+
 
   var getCFunc = (ident) => {
       var func = Module['_' + ident]; // closure exported function
@@ -1290,7 +1246,6 @@ async function createWasm() {
   if (Module['noExitRuntime']) noExitRuntime = Module['noExitRuntime'];
 if (Module['print']) out = Module['print'];
 if (Module['printErr']) err = Module['printErr'];
-if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
 
 Module['FS_createDataFile'] = FS.createDataFile;
 Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
@@ -1318,10 +1273,13 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   assert(typeof Module['wasmMemory'] == 'undefined', 'Use of `wasmMemory` detected.  Use -sIMPORTED_MEMORY to define wasmMemory externally');
   assert(typeof Module['INITIAL_MEMORY'] == 'undefined', 'Detected runtime INITIAL_MEMORY setting.  Use -sIMPORTED_MEMORY to define wasmMemory dynamically');
 
-  if (Module['preInit']) {
-    if (typeof Module['preInit'] == 'function') Module['preInit'] = [Module['preInit']];
-    while (Module['preInit'].length > 0) {
-      Module['preInit'].shift()();
+  var preInit = Module['preInit'];
+  if (preInit) {
+    if (typeof preInit == 'function') Module['preInit'] = preInit = [preInit];
+    // Written as a loop so that preInit functions that themselves add more
+    // preInit functions.  Is this actually needed?
+    while (preInit.length > 0) {
+      preInit.shift()();
     }
   }
   consumedModuleProp('preInit');
@@ -1387,6 +1345,8 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   'getFunctionAddress',
   'addFunction',
   'removeFunction',
+  'setValue',
+  'getValue',
   'intArrayFromString',
   'intArrayToString',
   'AsciiToString',
@@ -1416,12 +1376,14 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   'registerOrientationChangeEventCallback',
   'fillFullscreenChangeEventData',
   'registerFullscreenChangeEventCallback',
+  'callCanvasResizedCallback',
   'JSEvents_requestFullscreen',
   'JSEvents_resizeCanvasForFullscreen',
   'registerRestoreOldStyle',
   'hideEverythingExceptGivenElement',
   'restoreHiddenElements',
   'setLetterbox',
+  'currentFullscreenStrategy',
   'softFullscreenResizeWebGLRenderTarget',
   'doRequestFullscreen',
   'fillPointerlockChangeEventData',
@@ -1499,9 +1461,6 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   'writeGLArray',
   'registerWebGlEventCallback',
   'runAndAbortIfError',
-  'ALLOC_NORMAL',
-  'ALLOC_STACK',
-  'allocate',
   'writeStringToMemory',
   'writeAsciiToMemory',
   'allocateUTF8',
@@ -1557,8 +1516,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'addOnPostRun',
   'freeTableIndexes',
   'functionsInTableMap',
-  'setValue',
-  'getValue',
   'PATH',
   'PATH_FS',
   'UTF8Decoder',
@@ -1572,7 +1529,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'JSEvents',
   'specialHTMLTargets',
   'findCanvasEventTarget',
-  'currentFullscreenStrategy',
   'restoreOldWindowedStyle',
   'UNWIND_CACHE',
   'ExitStatus',
@@ -1586,7 +1542,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'exceptionCaught',
   'Browser',
   'requestFullscreen',
-  'requestFullScreen',
   'setCanvasSize',
   'getUserMedia',
   'createContext',
@@ -1665,6 +1620,7 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'FS_mkdir',
   'FS_mkdev',
   'FS_symlink',
+  'FS_link',
   'FS_rename',
   'FS_rmdir',
   'FS_readdir',
@@ -1747,6 +1703,23 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('onCOSCacheHit');
   ignoredModuleProp('onCOSCacheMiss');
   ignoredModuleProp('onCOSStore');
+  ignoredModuleProp('GL_MAX_TEXTURE_IMAGE_UNITS');
+  ignoredModuleProp('SDL_canPlayWithWebAudio');
+  ignoredModuleProp('SDL_numSimultaneouslyQueuedBuffers');
+  ignoredModuleProp('freePreloadedMediaOnUse');
+  ignoredModuleProp('preinitializedWebGLContext');
+  ignoredModuleProp('keyboardListeningElement');
+  ignoredModuleProp('doNotCaptureKeyboard');
+  ignoredModuleProp('extraStackTrace');
+  ignoredModuleProp('preloadPlugins');
+  ignoredModuleProp('preMainLoop');
+  ignoredModuleProp('postMainLoop');
+  ignoredModuleProp('forcedAspectRatio');
+  ignoredModuleProp('mainScriptUrlOrBlob');
+  ignoredModuleProp('onFullScreen');
+  ignoredModuleProp('INITIAL_MEMORY');
+  ignoredModuleProp('wasmMemory');
+  ignoredModuleProp('wasmBinary');
 }
 function UI_trigger_load(machine) { triggerLoadTape(machine); }
 function UI_trigger_save(machine,filename_ptr) { const jsFilename = UTF8ToString(filename_ptr); triggerSaveTape(machine, jsFilename); }
@@ -1826,34 +1799,34 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['emscripten_stack_get_current'] != 'undefined', 'missing Wasm export: emscripten_stack_get_current');
   assert(typeof wasmExports['memory'] != 'undefined', 'missing Wasm export: memory');
   assert(typeof wasmExports['__indirect_function_table'] != 'undefined', 'missing Wasm export: __indirect_function_table');
-  _malloc = Module['_malloc'] = createExportWrapper('malloc', 1);
-  _free = Module['_free'] = createExportWrapper('free', 1);
-  _UI_machine_create = Module['_UI_machine_create'] = createExportWrapper('UI_machine_create', 0);
-  _UI_machine_destroy = Module['_UI_machine_destroy'] = createExportWrapper('UI_machine_destroy', 1);
-  _UI_translate_keypress = Module['_UI_translate_keypress'] = createExportWrapper('UI_translate_keypress', 2);
-  _UI_get_text_screen_utf8 = Module['_UI_get_text_screen_utf8'] = createExportWrapper('UI_get_text_screen_utf8', 1);
-  _UI_get_machine_state = Module['_UI_get_machine_state'] = createExportWrapper('UI_get_machine_state', 1);
-  _UI_get_wait_reason = Module['_UI_get_wait_reason'] = createExportWrapper('UI_get_wait_reason', 1);
-  _UI_execute_batch = Module['_UI_execute_batch'] = createExportWrapper('UI_execute_batch', 2);
-  _UI_resume = Module['_UI_resume'] = createExportWrapper('UI_resume', 2);
-  _UI_request_edit_current_line = Module['_UI_request_edit_current_line'] = createExportWrapper('UI_request_edit_current_line', 1);
-  _UI_get_system_screen_utf8 = Module['_UI_get_system_screen_utf8'] = createExportWrapper('UI_get_system_screen_utf8', 1);
-  _UI_format_zx_line = Module['_UI_format_zx_line'] = createExportWrapper('UI_format_zx_line', 2);
-  _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = createExportWrapper('UI_get_cursor_mode', 2);
-  _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', 3);
-  _UI_get_version = Module['_UI_get_version'] = createExportWrapper('UI_get_version', 0);
-  _UI_serialize_program = Module['_UI_serialize_program'] = createExportWrapper('UI_serialize_program', 2);
-  _UI_deserialize_program = Module['_UI_deserialize_program'] = createExportWrapper('UI_deserialize_program', 3);
-  _UI_move_cursor_up = Module['_UI_move_cursor_up'] = createExportWrapper('UI_move_cursor_up', 1);
-  _UI_move_cursor_down = Module['_UI_move_cursor_down'] = createExportWrapper('UI_move_cursor_down', 1);
-  _UI_tick_frame = Module['_UI_tick_frame'] = createExportWrapper('UI_tick_frame', 1);
-  _UI_set_pressed_key = Module['_UI_set_pressed_key'] = createExportWrapper('UI_set_pressed_key', 2);
-  _UI_clear_pressed_key = Module['_UI_clear_pressed_key'] = createExportWrapper('UI_clear_pressed_key', 2);
-  _main = Module['_main'] = createExportWrapper('main', 2);
-  _fflush = createExportWrapper('fflush', 1);
+  _malloc = Module['_malloc'] = createExportWrapper('malloc', wasmExports['malloc'], 1);
+  _free = Module['_free'] = createExportWrapper('free', wasmExports['free'], 1);
+  _UI_machine_create = Module['_UI_machine_create'] = createExportWrapper('UI_machine_create', wasmExports['UI_machine_create'], 0);
+  _UI_machine_destroy = Module['_UI_machine_destroy'] = createExportWrapper('UI_machine_destroy', wasmExports['UI_machine_destroy'], 1);
+  _UI_translate_keypress = Module['_UI_translate_keypress'] = createExportWrapper('UI_translate_keypress', wasmExports['UI_translate_keypress'], 2);
+  _UI_get_text_screen_utf8 = Module['_UI_get_text_screen_utf8'] = createExportWrapper('UI_get_text_screen_utf8', wasmExports['UI_get_text_screen_utf8'], 1);
+  _UI_get_machine_state = Module['_UI_get_machine_state'] = createExportWrapper('UI_get_machine_state', wasmExports['UI_get_machine_state'], 1);
+  _UI_get_wait_reason = Module['_UI_get_wait_reason'] = createExportWrapper('UI_get_wait_reason', wasmExports['UI_get_wait_reason'], 1);
+  _UI_execute_batch = Module['_UI_execute_batch'] = createExportWrapper('UI_execute_batch', wasmExports['UI_execute_batch'], 2);
+  _UI_resume = Module['_UI_resume'] = createExportWrapper('UI_resume', wasmExports['UI_resume'], 2);
+  _UI_request_edit_current_line = Module['_UI_request_edit_current_line'] = createExportWrapper('UI_request_edit_current_line', wasmExports['UI_request_edit_current_line'], 1);
+  _UI_get_system_screen_utf8 = Module['_UI_get_system_screen_utf8'] = createExportWrapper('UI_get_system_screen_utf8', wasmExports['UI_get_system_screen_utf8'], 1);
+  _UI_format_zx_line = Module['_UI_format_zx_line'] = createExportWrapper('UI_format_zx_line', wasmExports['UI_format_zx_line'], 2);
+  _UI_get_cursor_mode = Module['_UI_get_cursor_mode'] = createExportWrapper('UI_get_cursor_mode', wasmExports['UI_get_cursor_mode'], 2);
+  _run_basic_line = Module['_run_basic_line'] = createExportWrapper('run_basic_line', wasmExports['run_basic_line'], 3);
+  _UI_get_version = Module['_UI_get_version'] = createExportWrapper('UI_get_version', wasmExports['UI_get_version'], 0);
+  _UI_serialize_program = Module['_UI_serialize_program'] = createExportWrapper('UI_serialize_program', wasmExports['UI_serialize_program'], 2);
+  _UI_deserialize_program = Module['_UI_deserialize_program'] = createExportWrapper('UI_deserialize_program', wasmExports['UI_deserialize_program'], 3);
+  _UI_move_cursor_up = Module['_UI_move_cursor_up'] = createExportWrapper('UI_move_cursor_up', wasmExports['UI_move_cursor_up'], 1);
+  _UI_move_cursor_down = Module['_UI_move_cursor_down'] = createExportWrapper('UI_move_cursor_down', wasmExports['UI_move_cursor_down'], 1);
+  _UI_tick_frame = Module['_UI_tick_frame'] = createExportWrapper('UI_tick_frame', wasmExports['UI_tick_frame'], 1);
+  _UI_set_pressed_key = Module['_UI_set_pressed_key'] = createExportWrapper('UI_set_pressed_key', wasmExports['UI_set_pressed_key'], 2);
+  _UI_clear_pressed_key = Module['_UI_clear_pressed_key'] = createExportWrapper('UI_clear_pressed_key', wasmExports['UI_clear_pressed_key'], 2);
+  _main = Module['_main'] = createExportWrapper('main', wasmExports['main'], 2);
+  _fflush = createExportWrapper('fflush', wasmExports['fflush'], 1);
   _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'];
   _emscripten_stack_get_base = wasmExports['emscripten_stack_get_base'];
-  _strerror = createExportWrapper('strerror', 1);
+  _strerror = createExportWrapper('strerror', wasmExports['strerror'], 1);
   _emscripten_stack_init = wasmExports['emscripten_stack_init'];
   _emscripten_stack_get_free = wasmExports['emscripten_stack_get_free'];
   __emscripten_stack_restore = wasmExports['_emscripten_stack_restore'];
@@ -1944,7 +1917,7 @@ async function run() {
 
   initRuntime();
 
-  preMain();
+  // No ATMAINS hooks
 
   Module['onRuntimeInitialized']?.();
   consumedModuleProp('onRuntimeInitialized');
@@ -1953,8 +1926,6 @@ async function run() {
   if (!noInitialRun) callMain();
 
   postRun();
-
-  checkStackCookie();
 }
 
 function checkUnflushedContent() {

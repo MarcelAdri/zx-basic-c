@@ -72,6 +72,7 @@ typedef struct {
 void zx_init_value(ZxValue *val);
 ZxError zx_assign_string(const uint8_t *text, size_t length, ZxValue *val);
 ZxError zx_assign_number(double num, ZxValue *val);
+ZxValueType type_of(ZxValue val);
 ZxError zx_get_number(ZxValue val, double *out_val);
 ZxError zx_get_int(ZxValue val, int min_val, int max_val, int *out_val);
 ZxError zx_get_string(ZxValue val, uint8_t **out_text, size_t *out_length);

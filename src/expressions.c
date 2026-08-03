@@ -311,7 +311,201 @@ static ZxError parse_array_index_numeric(ParserContext *ctx, uint16_t *indices, 
     }
     return ERR_C_NONSENSE_IN_BASIC;
 }
+static ZxError parse_function_definition(ParserContext *ctx, ZxValue *result_out) {
+    if (ctx == NULL || result_out == NULL) return ERR_UNKNOWN;
 
+    // 1. Lees de functienaam bij de CALL-site (bijv. "a" of "a$")
+    size_t bytes_read = 0;
+    char var_name[MAX_VAR_NAME_LEN] = {0};
+    ZxError err = parse_variable_name(ctx->buffer + ctx->cursor, ctx->size - ctx->cursor, var_name, &bytes_read);
+    if (err != ERR_0_OK) return err;
+
+    size_t name_len = strlen(var_name);
+    if (name_len < 1 || name_len > 2) {
+        return ERR_C_NONSENSE_IN_BASIC; // Meteen afkeuren als de naam te lang is!
+    }
+    if (name_len == 2 && var_name[1] != ZX_CHAR_DOLLAR) {
+        return ERR_C_NONSENSE_IN_BASIC; // 2 tekens mag uitsluitend als het tweede teken een '$' is
+    }
+
+    ctx->cursor += bytes_read;
+    zx_skip_spaces(ctx);
+    if (ctx->cursor >= ctx->size) return ERR_C_NONSENSE_IN_BASIC;
+
+    // 2. KOGELVRIJE WALKTHROUGH: Zoek DEF FN op in het geheugen
+    uint16_t search_line = 1;
+    bool def_found = false;
+    const uint8_t *def_chunk = NULL;
+    size_t def_chunk_size = 0;
+    size_t def_cursor = 0;
+
+    while (search_line < 10000) {
+        size_t line_size = 0;
+        uint16_t actual_line = search_line;
+        const uint8_t *line_buf = machine_retrieve_program_line(ctx->machine, &actual_line, &line_size);
+        if (line_buf == NULL) break;
+
+        search_line = actual_line;
+        uint8_t stmt_idx = 1; // Statements beginnen bij 1
+
+        while (true) {
+            const uint8_t *chunk = NULL;
+            size_t chunk_sz = 0;
+            extract_statement(line_buf, line_size, stmt_idx, &chunk, &chunk_sz);
+            if (chunk == NULL || chunk_sz == 0) break; // Einde van deze regel
+
+            if (chunk[0] == ZX_STATEMENT_DEF_FN) {
+                size_t ptr = 1;
+                while (ptr < chunk_sz && is_zx_space(chunk[ptr])) ptr++;
+
+                char fun_name[MAX_VAR_NAME_LEN] = {0};
+                size_t name_bytes = 0;
+                if (parse_variable_name(chunk + ptr, chunk_sz - ptr, fun_name, &name_bytes) == ERR_0_OK) {
+                    if (strcmp(var_name, fun_name) == 0) {
+                        def_found = true;
+                        def_chunk = chunk;
+                        def_chunk_size = chunk_sz;
+                        def_cursor = ptr + name_bytes;
+                        break;
+                    }
+                }
+            }
+            stmt_idx++;
+        }
+
+        if (def_found) break;
+        search_line++;
+    }
+
+    if (!def_found) return ERR_P_FN_WITHOUT_DEF;
+
+    // 3. PARSE PARAMETERS IN DE DEFINITIE (bijv. "(x, y$)")
+    char def_arg[52][3] = {0};
+    size_t def_num_args = 0;
+
+    while (def_cursor < def_chunk_size && is_zx_space(def_chunk[def_cursor])) def_cursor++;
+    if (def_cursor >= def_chunk_size || def_chunk[def_cursor] != ZX_CHAR_BRACKET_OPEN) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    def_cursor++; // Skip '('
+
+    while (def_cursor < def_chunk_size && def_chunk[def_cursor] != ZX_CHAR_BRACKET_CLOSE) {
+        while (def_cursor < def_chunk_size && is_zx_space(def_chunk[def_cursor])) def_cursor++;
+        if (def_cursor >= def_chunk_size) return ERR_C_NONSENSE_IN_BASIC;
+
+        char param_name[MAX_VAR_NAME_LEN] = {0};
+        size_t param_bytes = 0;
+        err = parse_variable_name(def_chunk + def_cursor, def_chunk_size - def_cursor, param_name, &param_bytes);
+        if (err != ERR_0_OK) return err;
+
+        strncpy(def_arg[def_num_args], param_name, 2);
+        def_num_args++;
+        def_cursor += param_bytes;
+
+        while (def_cursor < def_chunk_size && is_zx_space(def_chunk[def_cursor])) def_cursor++;
+        if (def_cursor < def_chunk_size && def_chunk[def_cursor] == ZX_CHAR_COMMA) {
+            def_cursor++; // Skip ','
+        }
+    }
+
+    if (def_cursor >= def_chunk_size || def_chunk[def_cursor] != ZX_CHAR_BRACKET_CLOSE) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    def_cursor++; // Skip ')'
+
+    // 4. PARSE ARGUMENTEN BIJ DE CALL-SITE (bijv. "(10, A$)")
+    if (ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_OPEN) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    ctx->cursor++; // Skip '('
+
+    ZxValue call_args[52];
+    ZxValue old_values[52];
+    bool existed[52];
+    for (size_t i = 0; i < 52; i++) {
+        zx_init_value(&call_args[i]);
+        zx_init_value(&old_values[i]);
+    }
+
+    size_t call_args_size = 0;
+
+    while (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_CLOSE) {
+        zx_skip_spaces(ctx);
+
+        // Gebruik de reguliere expressie-parser voor elk argument
+        err = parse_expression(ctx, &call_args[call_args_size]);
+        if (err != ERR_0_OK) goto error_cleanup;
+
+        call_args_size++;
+
+        zx_skip_spaces(ctx);
+        if (ctx->cursor < ctx->size && ctx->buffer[ctx->cursor] == ZX_CHAR_COMMA) {
+            ctx->cursor++; // Skip ','
+        }
+    }
+
+    if (ctx->cursor >= ctx->size || ctx->buffer[ctx->cursor] != ZX_CHAR_BRACKET_CLOSE) {
+        err = ERR_C_NONSENSE_IN_BASIC;
+        goto error_cleanup;
+    }
+    ctx->cursor++; // Skip ')'
+
+    // 5. VALIDEER AANTAL EN TYPES VAN PARAMETERS
+    if (def_num_args != call_args_size) {
+        err = ERR_Q_PARAMETER_ERROR;
+        goto error_cleanup;
+    }
+
+    for (size_t i = 0; i < call_args_size; i++) {
+        if ((strlen(def_arg[i]) == 1 && call_args[i].type != ZX_TYPE_NUMBER) ||
+            (strlen(def_arg[i]) == 2 && call_args[i].type != ZX_TYPE_STRING)) {
+            err = ERR_Q_PARAMETER_ERROR;
+            goto error_cleanup;
+        }
+    }
+
+    // 6. VARIABLE SHADOWING (Sla oude waarden op & injecteer parameters)
+    for (size_t i = 0; i < call_args_size; i++) {
+        if (machine_get_variable(ctx->machine, def_arg[i], NULL, 0, 0, &old_values[i]) == ERR_0_OK) {
+            existed[i] = true;
+        } else {
+            existed[i] = false;
+        }
+        machine_set_variable(ctx->machine, def_arg[i], NULL, 0, 0, call_args[i]);
+    }
+
+    // 7. EVALUEER DE FUNCTIE-BODY (Zoek '=' in def_chunk)
+    while (def_cursor < def_chunk_size && def_chunk[def_cursor] != ZX_OP_EQUAL) {
+        def_cursor++;
+    }
+    if (def_cursor >= def_chunk_size) {
+        err = ERR_C_NONSENSE_IN_BASIC;
+        goto restore_and_cleanup;
+    }
+    def_cursor++; // Skip '='
+
+    size_t dummy_bytes = 0;
+    err = solve_expression(ctx->machine, def_chunk + def_cursor, def_chunk_size - def_cursor, result_out, &dummy_bytes);
+
+restore_and_cleanup:
+    // 8. HERSTEL OUDE VARIABELE-TOESTAND
+    for (size_t i = 0; i < call_args_size; i++) {
+        if (existed[i]) {
+            machine_set_variable(ctx->machine, def_arg[i], NULL, 0, 0, old_values[i]);
+        }
+        zx_free_string(&old_values[i]);
+        zx_free_string(&call_args[i]);
+    }
+
+    return err;
+
+error_cleanup:
+    for (size_t i = 0; i < 52; i++) {
+        zx_free_string(&call_args[i]);
+        zx_free_string(&old_values[i]);
+    }
+    return err;
+}
 static ZxError parse_expression(ParserContext *ctx, ZxValue *out_value) {
     if (ctx == NULL || out_value == NULL) return ERR_UNKNOWN;
     ZxError err;
@@ -705,6 +899,13 @@ static ZxError parse_factor(ParserContext *ctx, ZxValue *out_value) {
         }
         err = ERR_C_NONSENSE_IN_BASIC;
         goto error_cleanup;
+    }
+    if (token == ZX_FUN_FN) {
+        ctx->cursor++;
+        zx_skip_spaces(ctx);
+        if (ctx->cursor >= ctx->size) return ERR_C_NONSENSE_IN_BASIC;
+
+        return parse_function_definition(ctx, out_value);
     }
     if (is_zx_number_start_character(token)) {
         size_t bytes_read;

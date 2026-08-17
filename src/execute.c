@@ -334,8 +334,15 @@ static ZxError execute_cmd_if(ZxMachine machine, const uint8_t *cmd, size_t outp
     return execute(machine, cmd + cursor, output_size - cursor);
 
 }
-static ZxError execute_cmd_ink(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    if (cmd[0] == ZX_STATEMENT_FLASH ||
+        cmd[0] == ZX_STATEMENT_BRIGHT ||
+        cmd[0] == ZX_STATEMENT_INVERSE ||
+        cmd[0] == ZX_STATEMENT_OVER) {
+        return ERR_NOT_YET_IMPLEMENTED;
+    }
 
     uint8_t modifier;
     double modifier_value;
@@ -351,15 +358,31 @@ static ZxError execute_cmd_ink(ZxMachine machine, const uint8_t *cmd, size_t out
         return ERR_C_NONSENSE_IN_BASIC;
     }
 
-    int ink_val = (int)modifier_value;
-    if (ink_val < 0 || ink_val > 7) { // Straks ink_val > 8 voor transparant TODO
-        return ERR_B_INTEGER_OUT_OF_RANGE;
-    }
-
     ZxScreen screen = machine_get_screen(machine);
     if (screen == NULL) return ERR_UNKNOWN;
 
-    return screen_set_perm_ink(screen, (uint8_t)ink_val);
+    switch (modifier) {
+        case ZX_STATEMENT_INK: {
+            int ink_val = (int)modifier_value;
+            if (ink_val < 0 || ink_val > 7) { // Straks ink_val > 8 voor transparant TODO
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            return screen_set_perm_ink(screen, (uint8_t)ink_val);
+        }
+
+        case ZX_STATEMENT_PAPER: {
+            int paper_val = (int)modifier_value;
+            if (paper_val < 0 || paper_val > 7) { // Straks ink_val > 8 voor transparant TODO
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            return screen_set_perm_paper(screen, (uint8_t)paper_val);
+        }
+        default:
+            return ERR_UNKNOWN;
+    }
+
 }
 static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
@@ -603,13 +626,12 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         //Modifiers
         if (is_zx_print_modifier(token)) {
             //Tijdelijke afvang toekomstige ontwikkeling TODO!
-            if (token == ZX_STATEMENT_PAPER ||
-                token == ZX_STATEMENT_FLASH ||
+            if (token == ZX_STATEMENT_FLASH ||
                 token == ZX_STATEMENT_BRIGHT ||
                 token == ZX_STATEMENT_INVERSE ||
                 token == ZX_STATEMENT_OVER) {
                 return ERR_NOT_YET_IMPLEMENTED;
-            }
+                }
 
             uint8_t modifier;
             double mod_value;
@@ -647,6 +669,14 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 }
 
                 screen_set_temp_ink(screen, (uint8_t)mod_value);
+                continue;
+            }
+            if (modifier == ZX_STATEMENT_PAPER) {
+                if (mod_value < 0 || mod_value > 7) {
+                    return ERR_B_INTEGER_OUT_OF_RANGE;
+                }
+
+                screen_set_temp_paper(screen, (uint8_t)mod_value);
                 continue;
             }
         }
@@ -886,7 +916,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
         case ZX_STATEMENT_IF:
             return execute_cmd_if(machine, input, input_size);
         case ZX_STATEMENT_INK:
-            return execute_cmd_ink(machine, input, input_size);
+        case ZX_STATEMENT_PAPER:
+            return execute_cmd_attributes(machine, input, input_size);
         case ZX_STATEMENT_LET:
             return execute_cmd_let(machine, input, input_size);
         case ZX_STATEMENT_LIST:

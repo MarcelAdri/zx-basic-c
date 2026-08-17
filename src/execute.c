@@ -17,9 +17,13 @@
 #include "characters.h"
 #include "helpers.h"
 #include "main.h"
+#include "screen.h"
 
 static ZxError execute_cmd_cls(ZxMachine machine) {
-    machine_clear_text_screen(machine);
+    ZxScreen screen = machine_get_screen(machine);
+    if (screen == NULL) return ERR_UNKNOWN;
+
+    screen_clear(screen);
     return ERR_0_OK;
 }
 static ZxError execute_cmd_dim(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
@@ -490,8 +494,13 @@ static ZxError execute_cmd_pause(ZxMachine machine, const uint8_t *cmd, size_t o
     return ERR_0_OK;
 }
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    ZxScreen screen = machine_get_screen(machine);
+    if (screen == NULL) return ERR_0_OK;
+
+    screen_reset_temp_attrs(screen);
+
     if (output_size <= 1) {
-        machine_next_line(machine);
+        machine_txt_new_line(machine);
         return ERR_0_OK;
     }
 
@@ -512,18 +521,19 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             continue;
         }
         if (token == ZX_CHAR_COMMA) {
-            int current_x = machine_get_text_cursor_x(machine);
+            int current_x = screen_get_txt_cursor_x(screen);
+            int current_y = screen_get_txt_cursor_y(screen);
             if (current_x < 16) {
-                machine_set_text_cursor_x(machine, 16);
+                screen_set_txt_cursor(screen, current_y, 16);
             } else {
-                machine_next_line(machine);
+                machine_txt_new_line(machine);
             }
             print_newline = false;
             cursor++;
             continue;
         }
         if (token == ZX_CHAR_QUOTE) {
-            machine_next_line(machine);
+            machine_txt_new_line(machine);
             print_newline = false;
             cursor++;
             continue;
@@ -559,7 +569,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             zx_free_string(&tab_stop);
 
             uint8_t tab_stop_value = (uint16_t)tab_stop_value_dbl % 32;
-            const uint8_t current_x = machine_get_text_cursor_x(machine);
+            const uint8_t current_x = screen_get_txt_cursor_x(screen);
 
             uint8_t num_spaces = (tab_stop_value < current_x) ? (32 - current_x) + tab_stop_value : tab_stop_value - current_x;
 
@@ -603,11 +613,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 zx_free_string(&coord);
                 return ERR_5_OUT_OF_SCREEN;
             }
-            if (y_dbl < 0 || y_dbl > 31) {
-                zx_free_string(&coord);
-                return ERR_B_INTEGER_OUT_OF_RANGE;
-            }
-            uint8_t y = (uint8_t)y_dbl;
+           uint8_t y = (uint8_t)y_dbl;
             zx_free_string(&coord);
             cursor += bytes_read;
 
@@ -639,8 +645,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
 
             cursor += bytes_read;
 
-            machine_set_text_cursor_y(machine, y);
-            machine_set_text_cursor_x(machine, x);
+            screen_set_txt_cursor(screen, y, x);
 
             print_newline = true;
             continue;
@@ -663,7 +668,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
     }
 
     if (print_newline) {
-        machine_next_line(machine);
+        machine_txt_new_line(machine);
     }
 
     return ERR_0_OK;

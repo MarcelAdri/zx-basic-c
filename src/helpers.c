@@ -116,7 +116,7 @@ ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic)
             zx_free_string(&zx_tokens);
 
             // 1. Voer de 'enter' / 'nieuwe regel' uit
-            machine_next_line(*machine);
+            machine_txt_new_line(*machine);
 
             // 2. Heeft next_line zojuist aan de noodrem getrokken?
             if (machine_get_wait_reason(*machine) == ZX_WAIT_SCROLL) {

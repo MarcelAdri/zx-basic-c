@@ -80,9 +80,13 @@ const char* UI_get_text_screen_utf8(ZxMachine machine) {
     char *ptr = screen_utf8_buffer;
     size_t remaining = sizeof(screen_utf8_buffer);
 
+    ZxScreen screen = machine_get_screen(machine);
+    if (screen == NULL) return "";
+
     for (int y = 0; y < 22; y++) {
         for (int x = 0; x < 32; x++) {
-            uint8_t token = *machine_get_from_text_screen(machine, y, x);
+            const ZxCell *cell = screen_get_cell(screen, y, x);
+            uint8_t token = cell->character;
 
             const char *utf8_char = get_printable_content_from_token(token);
             size_t len = strlen(utf8_char);
@@ -196,9 +200,14 @@ const char* UI_get_system_screen_utf8(ZxMachine machine) {
     char *ptr = screen_utf8_buffer;
     size_t remaining = sizeof(screen_utf8_buffer);
 
+    ZxScreen screen = machine_get_screen(machine);
+    if (screen == NULL) return "";
+
     for (int y = 0; y < 2; y++) {
         for (int x = 0; x < 32; x++) {
-            uint8_t token = *machine_get_from_system_screen(machine, y, x);
+            int cursor_y = y + MAIN_SCREEN_ROWS;
+            const ZxCell *cell = screen_get_cell(screen, cursor_y, x);
+            uint8_t token = cell->character;
 
             const char *utf8_char = get_printable_content_from_token(token);
             size_t len = strlen(utf8_char);

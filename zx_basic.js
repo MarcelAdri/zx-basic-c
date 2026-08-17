@@ -1071,7 +1071,7 @@ async function createWasm() {
   var printChar = (stream, curr) => {
       var buffer = printCharBuffers[stream];
       assert(buffer);
-      if (curr === 0 || curr === 10) {
+      if (!curr || curr === 10) {
         (stream === 1 ? out : err)(UTF8ArrayToString(buffer));
         buffer.length = 0;
       } else {
@@ -1216,7 +1216,7 @@ async function createWasm() {
         for (var i = 0; i < args.length; i++) {
           var converter = toC[argTypes[i]];
           if (converter) {
-            if (stack === 0) stack = stackSave();
+            if (!stack) stack = stackSave();
             cArgs[i] = converter(args[i]);
           } else {
             cArgs[i] = args[i];
@@ -1225,7 +1225,7 @@ async function createWasm() {
       }
       var ret = func(...cArgs);
       function onDone(ret) {
-        if (stack !== 0) stackRestore(stack);
+        if (stack) stackRestore(stack);
         return convertReturnValue(ret);
       }
   
@@ -1419,10 +1419,6 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   'addPromise',
   'idsToPromises',
   'makePromiseCallback',
-  'ExceptionInfo',
-  'findMatchingCatch',
-  'incrementUncaughtExceptionCount',
-  'decrementUncaughtExceptionCount',
   'Browser_asyncPrepareDataCounter',
   'isLeapYear',
   'ydayFromDate',
@@ -1465,7 +1461,6 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   'writeAsciiToMemory',
   'allocateUTF8',
   'allocateUTF8OnStack',
-  'demangle',
   'stackTrace',
   'getNativeTypeSize',
 ];
@@ -1538,8 +1533,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'emClearImmediate_deps',
   'emClearImmediate',
   'promiseMap',
-  'uncaughtExceptionCount',
-  'exceptionCaught',
   'Browser',
   'requestFullscreen',
   'setCanvasSize',

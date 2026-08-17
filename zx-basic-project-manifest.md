@@ -42,7 +42,7 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
 | 165   | RND          | ZX_FUN_RND             | zx_function_rnd                              |                                       |
 | 166   | INKEY$       | ZX_FUN_INKEY_S         | zx_function_inkey_s                          |                                       |
 | 167   | PI           | ZX_FUN_PI              | zx_function_pi                               |                                       |
-| 168   | FN           | ZX_FUN_FN              |                                              | TODO                                  |
+| 168   | FN           | ZX_FUN_FN              | parse_function_definition                    |                                       |
 | 169   | POINT        | ZX_FUN_POINT           |                                              | TODO                                  |
 | 170   | SCREEN$      | ZX_FUN_SCREEN_S        | zx_function_screen_s                         |                                       |
 | 171   | ATTR         | ZX_FUN_ATTR            |                                              | TODO                                  |
@@ -77,7 +77,7 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
 | 203   | THEN         | ZX_TOKEN_THEN          | execute_cmd_if                               |                                       |
 | 204   | TO           | ZX_TOKEN_TO            | parse_array_index_string<br/>execute_cmd_for |                                       |
 | 205   | STEP         |                        |                                              | TODO                                  |
-| 206   | DEF FN       |                        |                                              | TODO                                  |
+| 206   | DEF FN       | ZX_STATEMENT_DEF_FN    | parse_function_definition                    |                                       |
 | 207   | CAT          |                        |                                              | TODO                                  |
 | 208   | FORMAT       |                        |                                              | TODO                                  |
 | 209   | MOVE         |                        |                                              | TODO                                  |

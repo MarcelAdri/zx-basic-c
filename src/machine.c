@@ -13,6 +13,7 @@
 #include "zx_types.h"
 #include "helpers.h"
 #include "characters.h"
+#include "screen.h"
 
 #define NOT_FOUND (-1)
 
@@ -31,11 +32,7 @@ typedef struct Machine {
     uint32_t pause_start_frame;
     int pause_length;
 
-    uint8_t text_screen[22][32];
-    uint8_t system_screen[2][32];
-
-    uint8_t text_cursor_x;
-    uint8_t text_cursor_y;
+    ZxScreen screen;
 
     uint8_t current_pressed_key;
 
@@ -411,8 +408,7 @@ void machine_reset(ZxMachine machine) {
         }
     }
 
-    machine_clear_text_screen(machine);
-    machine_print_to_system(machine, ""); // Wis eventuele scroll? of error meldingen
+    machine->screen = screen_create();
 
     // --- 3. Reset de machine status ---
     machine_set_state(machine, ZX_STATE_IDLE);
@@ -430,78 +426,37 @@ void machine_reset(ZxMachine machine) {
     machine->frame_counter = 0;
     machine->pause_start_frame = 0;
     machine->pause_length = -1;
-
-    //TODO: GOSUB stack
 }
 void machine_destroy(ZxMachine machine) {
     if (machine != NULL) {
         machine_reset(machine);
+        screen_destroy(machine->screen);
 
         free(machine);
     }
 }
-uint8_t machine_get_text_cursor_x(ZxMachine machine) {
-    if (machine != NULL) {
-        return machine->text_cursor_x;
-    }
-    return 0;
+ZxScreen machine_get_screen(ZxMachine machine) {
+    if (machine == NULL) return NULL;
+    return machine->screen;
 }
-uint8_t machine_get_text_cursor_y(ZxMachine machine) {
-    if (machine != NULL) {
-        return machine->text_cursor_y;
-    }
-    return 0;
-}
-void machine_set_text_cursor_x(ZxMachine machine, const uint8_t x) {
-    if (machine != NULL) {
-        machine->text_cursor_x = x;
+void machine_txt_new_line(ZxMachine machine) {
+    if (machine == NULL || machine->screen == NULL) return;
+
+    if (screen_txt_new_line(machine->screen)) {
+        machine->wait_reason = ZX_WAIT_SCROLL;
     }
 }
-void machine_set_text_cursor_y(ZxMachine machine, const uint8_t y) {
-    if (machine != NULL) {
-        machine->text_cursor_y = y;
+void machine_put_txt_char(ZxMachine machine, const uint8_t c) {
+    if (machine == NULL || machine->screen == NULL) return;
+
+    if (screen_put_txt_char(machine->screen, c)) {
+        machine->wait_reason = ZX_WAIT_SCROLL;
     }
 }
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback) {
     if (machine != NULL) {
         machine->print_callback = callback;
     }
-}
-void machine_clear_text_screen(ZxMachine machine) {
-    if (machine != NULL) {
-        memset(&machine->text_screen[0][0], ' ', 22 * 32);
-        machine->text_cursor_x = 0;
-        machine->text_cursor_y = 0;
-    }
-}
-const uint8_t* machine_get_text_screen(ZxMachine machine) {
-    if (machine != NULL) {
-        return &machine->text_screen[0][0]; // Pointer naar de allereerste pixel
-    }
-    return NULL;
-}
-const uint8_t* machine_get_from_text_screen(ZxMachine machine, const uint8_t y, const uint8_t x) {
-    if (machine != NULL) {
-        return &machine->text_screen[y][x];
-    }
-    return NULL;
-}
-const uint8_t* machine_get_from_system_screen(ZxMachine machine, const uint8_t y, const uint8_t x) {
-    if (machine != NULL) {
-        return &machine->system_screen[y][x];
-    }
-    return NULL;
-}
-void machine_next_line(ZxMachine machine) {
-    machine->text_cursor_x = 0;
-    machine->text_cursor_y++;
-    if (machine->text_cursor_y > 21) {
-        machine->wait_reason = ZX_WAIT_SCROLL;
-        memmove(&machine->text_screen[0][0], &machine->text_screen[1][0], 21 * 32); //TODO: move screen update to resume
-        memset(&machine->text_screen[21][0], ' ', 32);
-        machine->text_cursor_y = 21;
-    }
-
 }
 static void machine_print_to_text(ZxMachine machine, const uint8_t *tokens, size_t len) {
     assert(tokens != NULL && "tokens mag nooit NULL zijn in deze interne functie");
@@ -517,17 +472,11 @@ static void machine_print_to_text(ZxMachine machine, const uint8_t *tokens, size
         char c = formatted_text[i];
 
         if (c == '\n' || c == '\r') {
-            machine_next_line(machine);
+            machine_txt_new_line(machine);
             continue;
         }
 
-        machine->text_screen[machine->text_cursor_y][machine->text_cursor_x] = (uint8_t)c;
-
-        if (machine->text_cursor_x >= 31) {
-            machine_next_line(machine);
-        } else {
-            machine->text_cursor_x++;
-        }
+        machine_put_txt_char(machine, (uint8_t)c);
     }
 }
 void machine_print_value(ZxMachine machine, const ZxValue value) {
@@ -559,26 +508,14 @@ void machine_print_value(ZxMachine machine, const ZxValue value) {
     }
 
 }
-const uint8_t* machine_get_system_screen(ZxMachine machine) {
-    if (machine != NULL) {
-        return &machine->system_screen[0][0];
-    }
-    return NULL;
-}
-
-// Een simpele functie om een melding (zoals "0 OK, 0:1") onderin te zetten
 void machine_print_to_system(ZxMachine machine, const char *text) {
     if (machine == NULL || text == NULL) return;
 
-    // Maak het systeemvak eerst even netjes schoon met spaties
-    memset(&machine->system_screen[0][0], ' ', 2 * 32);
+    screen_clear_sys(machine->screen);
 
     size_t len = strlen(text);
     for (size_t i = 0; i < len && i < 64; i++) {
-        // Bereken simpelweg de X en Y op basis van de index (max 64 tekens)
-        int y = i / 32;
-        int x = i % 32;
-        machine->system_screen[y][x] = text[i];
+        screen_put_sys_char(machine->screen, text[i]);
     }
 }
 uint32_t machine_get_frames(ZxMachine machine) {

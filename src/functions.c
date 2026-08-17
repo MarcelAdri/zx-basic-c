@@ -248,11 +248,13 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
     if (err != ERR_0_OK) {
         return err;
     }
-    if (x_val < 0 || x_val > 31 || y_val < 0 || y_val > 21) {
+
+    ZxScreen screen = machine_get_screen(machine);
+    const ZxCell *cell = screen_get_cell(screen, (uint8_t)y_val, (uint8_t)x_val);
+    if (cell == NULL) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
-    const uint8_t *screen = machine_get_from_text_screen(machine, (uint8_t)y_val, (uint8_t)x_val);
-    return zx_assign_string(screen, 1, result);
+    return zx_assign_string(&cell->character, 1, result);
 }
 static ZxError zx_function_sgn(const ZxValue argument, ZxValue *result) {
     double arg;

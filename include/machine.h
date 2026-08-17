@@ -6,6 +6,7 @@
 #define ZX_BASIC_C_MACHINE_H
 #include "errors.h"
 #include "zx_types.h"
+#include "screen.h"
 #include <stdbool.h>
 
 #define MAX_TEXT_SENTENCE_LEN 256
@@ -35,14 +36,6 @@ typedef enum {
 } ZxWaitReason;
 
 ZxMachine machine_create(void);
-uint8_t machine_get_text_cursor_x(ZxMachine machine);
-uint8_t machine_get_text_cursor_y(ZxMachine machine);
-void machine_set_text_cursor_x(ZxMachine machine, uint8_t x);
-void machine_set_text_cursor_y(ZxMachine machine, uint8_t y);
-void machine_clear_text_screen(ZxMachine machine);
-const uint8_t* machine_get_text_screen(ZxMachine machine);
-const uint8_t* machine_get_from_text_screen(ZxMachine machine, uint8_t y, uint8_t x);
-const uint8_t* machine_get_from_system_screen(ZxMachine machine, uint8_t y, uint8_t x);
 ZxState machine_get_state(ZxMachine machine);
 ZxWaitReason machine_get_wait_reason(ZxMachine machine);
 void machine_set_wait_reason(ZxMachine machine, ZxWaitReason reason);
@@ -74,10 +67,11 @@ uint32_t machine_get_rng_state(ZxMachine machine);
 void machine_clear_variables(ZxMachine machine);
 void machine_reset(ZxMachine machine);
 void machine_destroy(ZxMachine machine);
-void machine_next_line(ZxMachine machine);
+ZxScreen machine_get_screen(ZxMachine machine);
+void machine_txt_new_line(ZxMachine machine);
+void machine_put_txt_char(ZxMachine machine, uint8_t c);
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback);
 void machine_print_value(ZxMachine machine, ZxValue value);
-const uint8_t* machine_get_system_screen(ZxMachine machine);
 void machine_print_to_system(ZxMachine machine, const char *text);
 uint32_t machine_get_frames(ZxMachine machine);
 void machine_tick_frame(ZxMachine machine);

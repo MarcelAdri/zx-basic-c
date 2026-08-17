@@ -19,6 +19,40 @@
 #include "main.h"
 #include "screen.h"
 
+static ZxError parse_print_modifiers(ZxMachine machine,
+    const uint8_t *cmd,
+    const size_t size,
+    uint8_t *modifier,
+    double *mod_value,
+    size_t *bytes_read) {
+
+    if (size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    *modifier = cmd[0];
+
+    ZxValue value;
+    zx_init_value(&value);
+    size_t local_bytes_read = 0;
+    ZxError err = solve_expression(machine, cmd + 1, size - 1, &value, &local_bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    *bytes_read = local_bytes_read + 1;
+
+    double value_dbl;
+    err = zx_get_number(value, &value_dbl);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value);
+        return err;
+    }
+    *mod_value = value_dbl;
+    zx_free_string(&value);
+
+    return ERR_0_OK;
+
+}
+
 static ZxError execute_cmd_cls(ZxMachine machine) {
     ZxScreen screen = machine_get_screen(machine);
     if (screen == NULL) return ERR_UNKNOWN;
@@ -300,6 +334,33 @@ static ZxError execute_cmd_if(ZxMachine machine, const uint8_t *cmd, size_t outp
     return execute(machine, cmd + cursor, output_size - cursor);
 
 }
+static ZxError execute_cmd_ink(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    uint8_t modifier;
+    double modifier_value;
+    size_t bytes_read = 0;
+    ZxError err = parse_print_modifiers(machine, cmd, output_size, &modifier, &modifier_value, &bytes_read);
+    if (err != ERR_0_OK) return err;
+
+    size_t check_cursor = bytes_read;
+    while (check_cursor < output_size && is_zx_space(cmd[check_cursor])) {
+        check_cursor++;
+    }
+    if (check_cursor < output_size) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+    int ink_val = (int)modifier_value;
+    if (ink_val < 0 || ink_val > 7) { // Straks ink_val > 8 voor transparant TODO
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
+
+    ZxScreen screen = machine_get_screen(machine);
+    if (screen == NULL) return ERR_UNKNOWN;
+
+    return screen_set_perm_ink(screen, (uint8_t)ink_val);
+}
 static ZxError execute_cmd_let(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
 
@@ -539,51 +600,55 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             continue;
         }
 
-        // === STAP 2: MODIFIERS AFVANGEN (TAB) ===
-        if (token == ZX_TOKEN_TAB) {
-            cursor++; // Alleen het TAB-token zelf consumeren
-            if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+        //Modifiers
+        if (is_zx_print_modifier(token)) {
+            //Tijdelijke afvang toekomstige ontwikkeling TODO!
+            if (token == ZX_STATEMENT_PAPER ||
+                token == ZX_STATEMENT_FLASH ||
+                token == ZX_STATEMENT_BRIGHT ||
+                token == ZX_STATEMENT_INVERSE ||
+                token == ZX_STATEMENT_OVER) {
+                return ERR_NOT_YET_IMPLEMENTED;
+            }
 
-            ZxValue tab_stop;
-            zx_init_value(&tab_stop);
+            uint8_t modifier;
+            double mod_value;
             size_t bytes_read = 0;
-            ZxError err = solve_expression(machine, cmd + cursor, output_size - cursor, &tab_stop, &bytes_read);
-            if (err != ERR_0_OK) {
-                zx_free_string(&tab_stop);
-                return err;
+            ZxError err = parse_print_modifiers(machine, cmd + cursor, output_size - cursor, &modifier, &mod_value, &bytes_read);
+            if (err != ERR_0_OK) return err;
+
+            cursor += bytes_read;
+
+            if (modifier == ZX_TOKEN_TAB) {
+                if (mod_value < 0 || mod_value > 65535) {
+                    return ERR_B_INTEGER_OUT_OF_RANGE;
+                }
+
+                uint8_t tab_stop_value = (uint16_t)mod_value % 32;
+                const uint8_t current_x = screen_get_txt_cursor_x(screen);
+
+                uint8_t num_spaces = (tab_stop_value < current_x) ? (32 - current_x) + tab_stop_value : tab_stop_value - current_x;
+
+                uint8_t spaces[32];
+                memset(spaces, ZX_CHAR_SPACE, sizeof(spaces));
+
+                ZxValue spaces_value;
+                zx_init_value(&spaces_value);
+                zx_assign_string(spaces, num_spaces, &spaces_value);
+                machine_print_value(machine, spaces_value);
+                zx_free_string(&spaces_value);
+
+                print_newline = true; // Een TAB herstelt de newline-wens, tenzij er straks een ; volgt!
+                continue;
             }
+            if (modifier == ZX_STATEMENT_INK) {
+                if (mod_value < 0 || mod_value > 7) {
+                    return ERR_B_INTEGER_OUT_OF_RANGE;
+                }
 
-            double tab_stop_value_dbl;
-            err = zx_get_number(tab_stop, &tab_stop_value_dbl);
-            if (err != ERR_0_OK) {
-                zx_free_string(&tab_stop);
-                return err;
+                screen_set_temp_ink(screen, (uint8_t)mod_value);
+                continue;
             }
-
-            if (tab_stop_value_dbl < 0 || tab_stop_value_dbl > 65535) {
-                zx_free_string(&tab_stop);
-                return ERR_B_INTEGER_OUT_OF_RANGE;
-            }
-
-            cursor += bytes_read; // Schuif cursor op tot ná de getal-expressie
-            zx_free_string(&tab_stop);
-
-            uint8_t tab_stop_value = (uint16_t)tab_stop_value_dbl % 32;
-            const uint8_t current_x = screen_get_txt_cursor_x(screen);
-
-            uint8_t num_spaces = (tab_stop_value < current_x) ? (32 - current_x) + tab_stop_value : tab_stop_value - current_x;
-
-            uint8_t spaces[32];
-            memset(spaces, ZX_CHAR_SPACE, sizeof(spaces));
-
-            ZxValue spaces_value;
-            zx_init_value(&spaces_value);
-            zx_assign_string(spaces, num_spaces, &spaces_value);
-            machine_print_value(machine, spaces_value);
-            zx_free_string(&spaces_value);
-
-            print_newline = true; // Een TAB herstelt de newline-wens, tenzij er straks een ; volgt!
-            continue;
         }
 
         // === STAP 3: MODIFIERS AFVANGEN (AT) ===
@@ -820,6 +885,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_go(machine, input, input_size);
         case ZX_STATEMENT_IF:
             return execute_cmd_if(machine, input, input_size);
+        case ZX_STATEMENT_INK:
+            return execute_cmd_ink(machine, input, input_size);
         case ZX_STATEMENT_LET:
             return execute_cmd_let(machine, input, input_size);
         case ZX_STATEMENT_LIST:

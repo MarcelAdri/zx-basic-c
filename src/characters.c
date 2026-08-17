@@ -514,6 +514,18 @@ bool is_zx_alpha(const uint8_t c) {
     }
     return false;
 }
+bool is_zx_print_modifier(const uint8_t c) {
+    if (c == ZX_TOKEN_TAB ||
+        c == ZX_STATEMENT_INK ||
+        c == ZX_STATEMENT_PAPER ||
+        c == ZX_STATEMENT_FLASH ||
+        c == ZX_STATEMENT_BRIGHT ||
+        c == ZX_STATEMENT_INVERSE ||
+        c == ZX_STATEMENT_OVER) {
+        return true;
+    }
+    return false;
+}
 bool is_zx_alnum(const uint8_t c) {
     if ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) ||(c >= 97 && c <= 122)) {
         return true;

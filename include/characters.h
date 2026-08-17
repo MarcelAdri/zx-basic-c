@@ -260,6 +260,7 @@ bool is_zx_printable_character(uint8_t c);
 bool is_zx_graphics_character(uint8_t c);
 bool is_zx_alnum(uint8_t c);
 bool is_zx_alpha(uint8_t c);
+bool is_zx_print_modifier(uint8_t c);
 bool is_zx_space(uint8_t c);
 bool is_zx_break(uint8_t c);
 bool is_no(uint8_t c);

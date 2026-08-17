@@ -108,6 +108,19 @@ const char* UI_get_text_screen_utf8(ZxMachine machine) {
     return screen_utf8_buffer;
 }
 EMSCRIPTEN_KEEPALIVE
+const ZxCell* UI_get_vram_buffer(ZxMachine machine) {
+    if (machine == NULL) return NULL;
+    ZxScreen screen = machine_get_screen(machine);
+    return screen_get_buffer(screen);
+}
+
+EMSCRIPTEN_KEEPALIVE
+bool UI_get_flash_invert(ZxMachine machine) {
+    if (machine == NULL) return false;
+    // Knippert elke 16 frames (authentieke Sinclair timing)
+    return (machine_get_frames(machine) / 16) % 2 != 0;
+}
+EMSCRIPTEN_KEEPALIVE
 int UI_get_machine_state(ZxMachine machine) {
     return machine_get_state(machine);
 }

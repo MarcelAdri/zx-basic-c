@@ -1725,6 +1725,8 @@ var _UI_machine_create = Module['_UI_machine_create'] = makeInvalidEarlyAccess('
 var _UI_machine_destroy = Module['_UI_machine_destroy'] = makeInvalidEarlyAccess('_UI_machine_destroy');
 var _UI_translate_keypress = Module['_UI_translate_keypress'] = makeInvalidEarlyAccess('_UI_translate_keypress');
 var _UI_get_text_screen_utf8 = Module['_UI_get_text_screen_utf8'] = makeInvalidEarlyAccess('_UI_get_text_screen_utf8');
+var _UI_get_vram_buffer = Module['_UI_get_vram_buffer'] = makeInvalidEarlyAccess('_UI_get_vram_buffer');
+var _UI_get_flash_invert = Module['_UI_get_flash_invert'] = makeInvalidEarlyAccess('_UI_get_flash_invert');
 var _UI_get_machine_state = Module['_UI_get_machine_state'] = makeInvalidEarlyAccess('_UI_get_machine_state');
 var _UI_get_wait_reason = Module['_UI_get_wait_reason'] = makeInvalidEarlyAccess('_UI_get_wait_reason');
 var _UI_execute_batch = Module['_UI_execute_batch'] = makeInvalidEarlyAccess('_UI_execute_batch');
@@ -1763,6 +1765,8 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['UI_machine_destroy'] != 'undefined', 'missing Wasm export: UI_machine_destroy');
   assert(typeof wasmExports['UI_translate_keypress'] != 'undefined', 'missing Wasm export: UI_translate_keypress');
   assert(typeof wasmExports['UI_get_text_screen_utf8'] != 'undefined', 'missing Wasm export: UI_get_text_screen_utf8');
+  assert(typeof wasmExports['UI_get_vram_buffer'] != 'undefined', 'missing Wasm export: UI_get_vram_buffer');
+  assert(typeof wasmExports['UI_get_flash_invert'] != 'undefined', 'missing Wasm export: UI_get_flash_invert');
   assert(typeof wasmExports['UI_get_machine_state'] != 'undefined', 'missing Wasm export: UI_get_machine_state');
   assert(typeof wasmExports['UI_get_wait_reason'] != 'undefined', 'missing Wasm export: UI_get_wait_reason');
   assert(typeof wasmExports['UI_execute_batch'] != 'undefined', 'missing Wasm export: UI_execute_batch');
@@ -1798,6 +1802,8 @@ function assignWasmExports(wasmExports) {
   _UI_machine_destroy = Module['_UI_machine_destroy'] = createExportWrapper('UI_machine_destroy', wasmExports['UI_machine_destroy'], 1);
   _UI_translate_keypress = Module['_UI_translate_keypress'] = createExportWrapper('UI_translate_keypress', wasmExports['UI_translate_keypress'], 2);
   _UI_get_text_screen_utf8 = Module['_UI_get_text_screen_utf8'] = createExportWrapper('UI_get_text_screen_utf8', wasmExports['UI_get_text_screen_utf8'], 1);
+  _UI_get_vram_buffer = Module['_UI_get_vram_buffer'] = createExportWrapper('UI_get_vram_buffer', wasmExports['UI_get_vram_buffer'], 1);
+  _UI_get_flash_invert = Module['_UI_get_flash_invert'] = createExportWrapper('UI_get_flash_invert', wasmExports['UI_get_flash_invert'], 1);
   _UI_get_machine_state = Module['_UI_get_machine_state'] = createExportWrapper('UI_get_machine_state', wasmExports['UI_get_machine_state'], 1);
   _UI_get_wait_reason = Module['_UI_get_wait_reason'] = createExportWrapper('UI_get_wait_reason', wasmExports['UI_get_wait_reason'], 1);
   _UI_execute_batch = Module['_UI_execute_batch'] = createExportWrapper('UI_execute_batch', wasmExports['UI_execute_batch'], 2);

@@ -648,14 +648,28 @@
         updateDisplay();
     }
 
-    function emulatorRunLoop() {
+    let lastTime = performance.now();
+    const MS_PER_FRAME = 1000 / 50; // Exact 20 ms per ZX frame (50 Hz)
+    let timeAccumulator = 0;
+
+    function emulatorRunLoop(currentTime) {
         if (!spectrumMachinePointer) {
             requestAnimationFrame(emulatorRunLoop);
             return;
         }
 
-        Module.ccall('UI_tick_frame', 'void', ['number'], [spectrumMachinePointer]);
+        // 1. Bereken verstreken echte tijd sinds de vorige animatie-frame
+        const delta = currentTime - lastTime;
+        lastTime = currentTime;
+        timeAccumulator += delta;
 
+        // 2. Tik de machine-frames ALLEEN op echte 50 Hz intervallen op
+        while (timeAccumulator >= MS_PER_FRAME) {
+            Module.ccall('UI_tick_frame', 'void', ['number'], [spectrumMachinePointer]);
+            timeAccumulator -= MS_PER_FRAME;
+        }
+
+        // 3. Batch en rendering
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
         const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
 
@@ -663,9 +677,7 @@
             Module.ccall('UI_execute_batch', 'void', ['number', 'number'], [spectrumMachinePointer, 500]);
         }
 
-        // Herteken het canvas elke animatieframetick (voor soepele cursor/flash animaties)
         renderScreens();
-
         requestAnimationFrame(emulatorRunLoop);
     }
 </script>

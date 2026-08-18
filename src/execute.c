@@ -337,8 +337,7 @@ static ZxError execute_cmd_if(ZxMachine machine, const uint8_t *cmd, size_t outp
 static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
 
-    if (cmd[0] == ZX_STATEMENT_INVERSE ||
-        cmd[0] == ZX_STATEMENT_OVER) {
+    if (cmd[0] == ZX_STATEMENT_OVER) {
         return ERR_NOT_YET_IMPLEMENTED;
     }
 
@@ -391,7 +390,15 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_perm_flash(screen, (uint8_t)bright_val);
+            return screen_set_perm_bright(screen, (uint8_t)bright_val);
+        }
+        case ZX_STATEMENT_INVERSE: {
+            int inverse_val = (int)modifier_value;
+            if (inverse_val < 0 || inverse_val > 1) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            return screen_set_perm_inverse(screen, (uint8_t)inverse_val);
         }
         default:
             return ERR_UNKNOWN;
@@ -640,8 +647,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         //Modifiers
         if (is_zx_print_modifier(token)) {
             //Tijdelijke afvang toekomstige ontwikkeling TODO!
-            if (token == ZX_STATEMENT_INVERSE ||
-                token == ZX_STATEMENT_OVER) {
+            if (token == ZX_STATEMENT_OVER) {
                 return ERR_NOT_YET_IMPLEMENTED;
                 }
 
@@ -705,6 +711,14 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 }
 
                 screen_set_temp_bright(screen, (uint8_t)mod_value);
+                continue;
+            }
+            if (modifier == ZX_STATEMENT_INVERSE) {
+                if (mod_value < 0 || mod_value > 1) {
+                    return ERR_B_INTEGER_OUT_OF_RANGE;
+                }
+
+                screen_set_temp_inverse(screen, (uint8_t)mod_value);
                 continue;
             }
         }
@@ -947,6 +961,7 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
         case ZX_STATEMENT_PAPER:
         case ZX_STATEMENT_FLASH:
         case ZX_STATEMENT_BRIGHT:
+        case ZX_STATEMENT_INVERSE:
             return execute_cmd_attributes(machine, input, input_size);
         case ZX_STATEMENT_LET:
             return execute_cmd_let(machine, input, input_size);

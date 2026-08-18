@@ -365,7 +365,7 @@ uint8_t screen_get_sys_cursor_y(ZxScreen screen) {
 const ZxCell* screen_get_cell(ZxScreen screen, const int y, const int x) {
     if (screen == NULL) return NULL;
 
-    if ((y < 0 && y >= TOTAL_SCREEN_ROWS) || (x < 0 && x >= SCREEN_COLS)) {
+    if ((y < 0 || y >= TOTAL_SCREEN_ROWS) || (x < 0 || x >= SCREEN_COLS)) {
         return NULL;
     }
 

@@ -337,10 +337,6 @@ static ZxError execute_cmd_if(ZxMachine machine, const uint8_t *cmd, size_t outp
 static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
 
-    if (cmd[0] == ZX_STATEMENT_OVER) {
-        return ERR_NOT_YET_IMPLEMENTED;
-    }
-
     uint8_t modifier;
     double modifier_value;
     size_t bytes_read = 0;
@@ -399,6 +395,14 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
             }
 
             return screen_set_perm_inverse(screen, (uint8_t)inverse_val);
+        }
+        case ZX_STATEMENT_OVER: {
+            int over_val = (int)modifier_value;
+            if (over_val < 0 || over_val > 1) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            return screen_set_perm_over(screen, (uint8_t)over_val);
         }
         default:
             return ERR_UNKNOWN;
@@ -646,11 +650,6 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
 
         //Modifiers
         if (is_zx_print_modifier(token)) {
-            //Tijdelijke afvang toekomstige ontwikkeling TODO!
-            if (token == ZX_STATEMENT_OVER) {
-                return ERR_NOT_YET_IMPLEMENTED;
-                }
-
             uint8_t modifier;
             double mod_value;
             size_t bytes_read = 0;
@@ -719,6 +718,14 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 }
 
                 screen_set_temp_inverse(screen, (uint8_t)mod_value);
+                continue;
+            }
+            if (modifier == ZX_STATEMENT_OVER) {
+                if (mod_value < 0 || mod_value > 1) {
+                    return ERR_B_INTEGER_OUT_OF_RANGE;
+                }
+
+                screen_set_temp_over(screen, (uint8_t)mod_value);
                 continue;
             }
         }
@@ -962,6 +969,7 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
         case ZX_STATEMENT_FLASH:
         case ZX_STATEMENT_BRIGHT:
         case ZX_STATEMENT_INVERSE:
+        case ZX_STATEMENT_OVER:
             return execute_cmd_attributes(machine, input, input_size);
         case ZX_STATEMENT_LET:
             return execute_cmd_let(machine, input, input_size);

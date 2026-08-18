@@ -88,12 +88,12 @@ Om fantoom-types en compilerwarnings te voorkomen, hanteren we strikt deze defin
 | 214   | VERIFY       |                        |                                              | TODO                                  |
 | 215   | BEEP         |                        |                                              | TODO                                  |
 | 216   | CIRCLE       |                        |                                              | TODO                                  |
-| 217   | INK          |                        |                                              | TODO                                  |
-| 218   | PAPER        |                        |                                              | TODO                                  |
-| 219   | FLASH        |                        |                                              | TODO                                  |
-| 220   | BRIGHT       |                        |                                              | TODO                                  |
-| 221   | INVERSE      |                        |                                              | TODO                                  |
-| 222   | OVER         |                        |                                              | TODO                                  |
+| 217   | INK          | ZX_STATEMENT_INK       | execute_cmd_attributes & execute_cmd_print   |                                       |
+| 218   | PAPER        | ZX_STATEMENT_PAPER     | execute_cmd_attributes & execute_cmd_print   |                                       |
+| 219   | FLASH        | ZX_STATEMENT_FLASH     | execute_cmd_attributes & execute_cmd_print   |                                       |
+| 220   | BRIGHT       | ZX_STATEMENT_BRIGHT    | execute_cmd_attributes & execute_cmd_print   |                                       |
+| 221   | INVERSE      | ZX_STATEMENT_INVERSE   | execute_cmd_attributes & execute_cmd_print   |                                       |
+| 222   | OVER         | ZX_STATEMENT_OVER      | execute_cmd_attributes & execute_cmd_print   | TODO rendering                        |
 | 223   | OUT          |                        |                                              | TODO                                  |
 | 224   | LPRINT       |                        |                                              | TODO                                  |
 | 225   | LLIST        |                        |                                              | TODO                                  |

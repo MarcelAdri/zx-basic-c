@@ -64,7 +64,7 @@ void screen_set_sys_cursor(ZxScreen screen, uint8_t y, uint8_t x);
 uint8_t screen_get_sys_cursor_x(ZxScreen screen);
 uint8_t screen_get_sys_cursor_y(ZxScreen screen);
 
-const ZxCell* screen_get_cell(ZxScreen screen, uint8_t y, uint8_t x);
+const ZxCell* screen_get_cell(ZxScreen screen, int y, int x);
 const ZxCell* screen_get_buffer(ZxScreen screen);
 
 #endif //ZX_BASIC_C_SCREEN_H

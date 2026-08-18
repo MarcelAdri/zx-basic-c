@@ -7,6 +7,9 @@
 #include <math.h>
 #include <ctype.h>
 #include "functions.h"
+
+#include <limits.h>
+
 #include "characters.h"
 #include "errors.h"
 #include "machine.h"
@@ -152,6 +155,29 @@ static ZxError zx_function_atn(const ZxValue argument, ZxValue *result) {
     }
     return zx_assign_number(atan(arg), result);
 }
+static ZxError zx_function_attr(ZxMachine machine, const ZxValue argument1, const ZxValue argument2, ZxValue *result) {
+    ZxScreen screen = machine_get_screen(machine);
+    if (screen == NULL) return ERR_UNKNOWN;
+
+    double y;
+    ZxError err = zx_get_number(argument1, &y);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    double x;
+    err = zx_get_number(argument2, &x);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    if ((y < INT_MIN|| y >= INT_MAX) || (x < INT_MIN || x >= INT_MAX))
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+
+    const ZxCell *cell = screen_get_cell(screen, (int)y, (int)x);
+    if (cell == NULL) return ERR_B_INTEGER_OUT_OF_RANGE;
+
+    const double result_value = cell->attribute;
+    return zx_assign_number(result_value, result);
+}
 static ZxError zx_function_chr_string(const ZxValue argument, ZxValue *result) {
     double arg;
     ZxError err = zx_get_number(argument, &arg);
@@ -249,8 +275,11 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
         return err;
     }
 
+    if ((y_val < INT_MIN|| y_val >= INT_MAX) || (x_val < INT_MIN || x_val >= INT_MAX))
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+
     ZxScreen screen = machine_get_screen(machine);
-    const ZxCell *cell = screen_get_cell(screen, (uint8_t)y_val, (uint8_t)x_val);
+    const ZxCell *cell = screen_get_cell(screen, (int)y_val, (int)x_val);
     if (cell == NULL) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
@@ -489,7 +518,7 @@ ZxError zx_function_call_2_arg(ZxMachine machine, const uint8_t function, const 
 
     switch (function) {
         case ZX_FUN_ATTR:
-            return ERR_NOT_YET_IMPLEMENTED;
+            return zx_function_attr(machine, argument1, argument2, result);
         case ZX_FUN_POINT:
             return ERR_NOT_YET_IMPLEMENTED;
         case ZX_FUN_SCREEN_S:

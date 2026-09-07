@@ -5,321 +5,327 @@
 #include "screen.h"
 #include "characters.h"
 
-#include <stdlib.h>
 #include <string.h>
-
-
 
 #define SCREEN_COLS 32
 #define SYSTEM_SCREEN_ROWS 2
 #define TOTAL_SCREEN_ROWS (MAIN_SCREEN_ROWS + SYSTEM_SCREEN_ROWS)
 #define SYS_DEFAULT_ATTR 0x38
 
-struct ZxScreen {
-    ZxCell vram[TOTAL_SCREEN_ROWS][SCREEN_COLS]; // 1 aaneengesloten blok van 768 cellen!
+#define VRAM_CHARS_START   16384  // (Straks voor pixels/karakters)
+#define VRAM_ATTRS_START   22528  // 768 attribuut-bytes
+#define SYSVAR_ATTR_P      23693  // Permanente attributen
+#define SYSVAR_ATTR_T      23695  // Tijdelijke attributen
+#define SYSVAR_MASK_P      23694 // Transparantie
+#define SYSVAR_MASK_T      23696 // Transparantie
+#define SYSVAR_P_FLAG      23697 //Inverse en Over
+#define SYSVAR_BORDCR      23624 //Border attributes
+#define SYSVAR_S_POSN_COL  23688  // 33 - x (text)
+#define SYSVAR_S_POSN_ROW  23689  // 24 - y (text)
+#define SYSVAR_S_POSNL_COL  23682  // 33 - (x + 1) (sys)
+#define SYSVAR_S_POSNL_ROW  23683  // 24 - y (sys)
+#define SYSVAR_DF_SZ       23659 //hoogte sys-vak
 
-    // Gescheiden cursors voor de twee zones!
-    uint8_t main_cursor_x;
-    uint8_t main_cursor_y; // 0 t/m 21
+#define ATTR_FLASH_MASK 0x80 // 1000 0000
+#define ATTR_BRIGHT_MASK 0X40 // 0100 0000
+#define ATTR_PAPER_MASK 0X38 // 0011 1000
+#define ATTR_INK_MASK 0x07 // 0000 0111
 
-    uint8_t sys_cursor_x;
-    uint8_t sys_cursor_y;  // 0 t/m 1 (relatief voor het systeemvak)
+#define ATTR_P_INV_MASK 0x40 // 0100 0000
+#define ATTR_P_OVER_MASK 0x10 // 0001 0000
+#define ATTR_T_INV_MASK 0x04 // 0000 0100
+#define ATTR_T_OVER_MASK 0x01 // 0000 0001
 
-    //Attributen
-    ZxPrintAttributes perm_attrs;
-    ZxPrintAttributes temp_attrs;
-};
-
-static uint8_t combine_attributes(uint8_t current_vram_attr, const ZxPrintAttributes *attrs) {
-    // 1. Bepaal INK (bij 8/transparent behouden we de oude INK van het scherm)
-    uint8_t ink = (attrs->ink == 8) ? (current_vram_attr & 0x07) : attrs->ink;
-
-    // 2. Bepaal PAPER (bij 8/transparent behouden we de oude PAPER)
-    uint8_t paper = (attrs->paper == 8) ? ((current_vram_attr >> 3) & 0x07) : attrs->paper;
-
-    uint8_t flash = (attrs->flash == 8) ? (current_vram_attr & 0x80) : (attrs->flash ? 0x80 : 0x00);
-    uint8_t bright = (attrs->bright == 8) ? (current_vram_attr & 0x40) : (attrs->bright ? 0x40 : 0x00);
-
-    // 3. Pas INVERSE toe (wissel INK en PAPER om)
-    if (attrs->inverse) {
-        uint8_t tmp = ink;
-        ink = paper;
-        paper = tmp;
+static void apply_flash_bits(uint8_t *attr_byte, uint8_t *mask_byte, uint8_t flash) {
+    if (flash == 8) {
+        *mask_byte |= ATTR_FLASH_MASK;  // Transparant: masker AAN
+        *attr_byte &= ~ATTR_FLASH_MASK; // Data UIT
+    } else {
+        *mask_byte &= ~ATTR_FLASH_MASK; // Masker UIT
+        if (flash == 1) {
+            *attr_byte |= ATTR_FLASH_MASK;
+        } else {
+            *attr_byte &= ~ATTR_FLASH_MASK;
+        }
     }
-
-    // Pak alles samen in 1 authentieke byte
-    return flash | bright | (paper << 3) | ink;
 }
-static ZxPrintAttributes separate_attributes(const uint8_t vram_attr) {
-    ZxPrintAttributes attrs;
-    attrs.flash = (vram_attr & 0x80) ? 1 : 0;
-    attrs.bright = (vram_attr & 0x40) ? 1 : 0;
-    attrs.inverse = 0;
-    attrs.over = 0;
-    attrs.ink = vram_attr & 0x07;
-    attrs.paper = (vram_attr >> 3) & 0x07;
-    return attrs;
+static void apply_bright_bits(uint8_t *attr_byte, uint8_t *mask_byte, uint8_t bright) {
+    if (bright == 8) {
+        *mask_byte |= ATTR_BRIGHT_MASK;  // Transparant: masker AAN
+        *attr_byte &= ~ATTR_BRIGHT_MASK; // Data UIT
+    } else {
+        *mask_byte &= ~ATTR_BRIGHT_MASK; // Masker UIT
+        if (bright == 1) {
+            *attr_byte |= ATTR_BRIGHT_MASK;
+        } else {
+            *attr_byte &= ~ATTR_BRIGHT_MASK;
+        }
+    }
+}
+static void apply_paper_bits(uint8_t *attr_byte, uint8_t *mask_byte, uint8_t paper) {
+    if (paper == 8) {
+        *mask_byte |= ATTR_PAPER_MASK;  // Maskeer alle 3 de paper-bits (bits 3..5)
+        *attr_byte &= ~ATTR_PAPER_MASK; // Wis de paper-bits in de data
+    } else {
+        *mask_byte &= ~ATTR_PAPER_MASK; // Masker UIT voor paper
+        // Wis de oude 3 paper-bits en schrijf de nieuwe waarde (0..7) 3 posities naar links
+        *attr_byte = (*attr_byte & ~ATTR_PAPER_MASK) | ((paper & 0x07) << 3);
+    }
+}
+
+static void apply_ink_bits(uint8_t *attr_byte, uint8_t *mask_byte, uint8_t ink) {
+    if (ink == 8) {
+        *mask_byte |= ATTR_INK_MASK;  // Maskeer alle 3 de ink-bits (bits 0..2)
+        *attr_byte &= ~ATTR_INK_MASK; // Wis de ink-bits in de data
+    } else {
+        *mask_byte &= ~ATTR_INK_MASK; // Masker UIT voor ink
+        // Wis de oude 3 ink-bits en schrijf de nieuwe waarde (0..7) op bits 0..2
+        *attr_byte = (*attr_byte & ~ATTR_INK_MASK) | (ink & 0x07);
+    }
 }
 
 // Life Cycle
-ZxScreen screen_create(void) {
-    // 1. Alloceer geheugen op de heap voor de schermstructuur
-    ZxScreen screen = malloc(sizeof(struct ZxScreen));
-    if (screen == NULL) return NULL;
+void screen_init(ZxScreen screen) {
+    if (screen == NULL) return;
 
-    // 2. Zet alle velden (zoals de cursors) gegarandeerd op 0
-    memset(screen, 0, sizeof(struct ZxScreen));
+    // Zet de Sinclair fabrieksinstellingen in het geheugen
+    screen[SYSVAR_ATTR_P] = SYS_DEFAULT_ATTR;
+    screen[SYSVAR_ATTR_T] = SYS_DEFAULT_ATTR;
+    screen[SYSVAR_MASK_P] = 0x00;
+    screen[SYSVAR_MASK_T] = 0x00;
+    screen[SYSVAR_P_FLAG] = 0x00;
+    screen[SYSVAR_BORDCR] = SYS_DEFAULT_ATTR;
 
-    // 3. Standaard ZX Spectrum opstart-attributen: PAPER 7 (wit), INK 0 (zwart)
-    ZxPrintAttributes attrs;
-    attrs.ink = 0;
-    attrs.paper = 7;
-    attrs.flash = 0;
-    attrs.bright = 0;
-    attrs.inverse = 0;
-    attrs.over = 0;
-
-    uint8_t vram_attrs = 0;
-
-    screen_set_perm_attrs(screen, &attrs);
-    screen_reset_temp_attrs(screen);
-
-    // 4. Vul het hele VRAM met spaties en de standaard opstart-kleuren
+    // Wis het scherm met deze standaarden
     screen_clear(screen);
-
-    return screen;
+    screen_clear_sys(screen);
 }
-
-void screen_destroy(ZxScreen screen) {
-    if (screen != NULL) {
-        free(screen);
-    }
-}
-
 void screen_clear(ZxScreen screen) {
     if (screen == NULL) return;
 
     screen_reset_temp_attrs(screen);
 
-    uint8_t vram_attrs = 0;
+    uint8_t perm_attr = screen[SYSVAR_ATTR_P];
 
-    for (int y = 0; y < TOTAL_SCREEN_ROWS; y++) {
+    for (int y = 0; y < MAIN_SCREEN_ROWS; y++) {
         for (int x = 0; x < SCREEN_COLS; x++) {
-            screen->vram[y][x].character = ZX_CHAR_SPACE;
-            if (y < MAIN_SCREEN_ROWS) {
-                screen->vram[y][x].attribute = combine_attributes(vram_attrs, &screen->temp_attrs);
-            } else {
-                screen->vram[y][x].attribute = SYS_DEFAULT_ATTR;
-            }
+            int offset = (y * 32) + x;
+            screen[VRAM_CHARS_START + offset] = ZX_CHAR_SPACE;
+            screen[VRAM_ATTRS_START + offset] = perm_attr;
         }
     }
 
-    screen->main_cursor_x = 0;
-    screen->main_cursor_y = 0;
+    // Zet cursor terug op (0, 0)
+    screen_set_txt_cursor(screen, 0, 0);
 }
 
 //Attribuut beheer permanent
-void screen_set_perm_attrs(ZxScreen screen, const ZxPrintAttributes *attrs) {
-    if (screen == NULL || attrs == NULL) return;
-
-    screen->perm_attrs = *attrs;
-}
-ZxPrintAttributes screen_get_perm_attrs(ZxScreen screen) {
-    if (screen == NULL) return (ZxPrintAttributes){0};
-    return screen->perm_attrs;
-}
-ZxError screen_set_perm_flash(ZxScreen screen, const uint8_t flash) {
+ZxError screen_set_flash(ZxScreen screen, const uint8_t flash, const bool is_permanent) {
     if (screen == NULL) return ERR_UNKNOWN;
-
     if (flash != 0 && flash != 1 && flash != 8) {
-        return ERR_UNKNOWN;
+        return ERR_B_INTEGER_OUT_OF_RANGE;
     }
 
-    screen->perm_attrs.flash = flash;
-    screen->temp_attrs.flash = flash;
+    // Pas altijd toe op de actieve tijdelijke print-status
+    apply_flash_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], flash);
+
+    // Indien permanent: werk ook de permanente systeemvariabelen bij
+    if (is_permanent) {
+        apply_flash_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], flash);
+    }
 
     return ERR_0_OK;
 }
-ZxError screen_set_perm_bright(ZxScreen screen, const uint8_t bright) {
+ZxError screen_set_bright(ZxScreen screen, const uint8_t bright, const bool is_permanent) {
     if (screen == NULL) return ERR_UNKNOWN;
-
     if (bright != 0 && bright != 1 && bright != 8) {
-        return ERR_UNKNOWN;
+        return ERR_B_INTEGER_OUT_OF_RANGE;
     }
 
-    screen->perm_attrs.bright = bright;
-    screen->temp_attrs.bright = bright;
+    // Pas altijd toe op de actieve tijdelijke print-status
+    apply_bright_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], bright);
+
+    // Indien permanent: werk ook de permanente systeemvariabelen bij
+    if (is_permanent) {
+        apply_bright_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], bright);
+    }
 
     return ERR_0_OK;
 }
-ZxError screen_set_perm_ink(ZxScreen screen, const uint8_t ink) {
+ZxError screen_set_ink(ZxScreen screen, const uint8_t ink, const bool is_permanent) {
     if (screen == NULL) return ERR_UNKNOWN;
 
     if (ink > 8) {
-        return ERR_UNKNOWN;
+        return ERR_B_INTEGER_OUT_OF_RANGE;
     }
 
-    screen->perm_attrs.ink = ink;
-    screen->temp_attrs.ink = ink;
+    // Pas altijd toe op de actieve tijdelijke print-status
+    apply_ink_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], ink);
+
+    // Indien permanent: werk ook de permanente systeemvariabelen bij
+    if (is_permanent) {
+        apply_ink_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], ink);
+    }
 
     return ERR_0_OK;
 }
-ZxError screen_set_perm_paper(ZxScreen screen, const uint8_t paper) {
+ZxError screen_set_paper(ZxScreen screen, const uint8_t paper, const bool is_permanent) {
     if (screen == NULL) return ERR_UNKNOWN;
 
     if (paper > 8) {
-        return ERR_UNKNOWN;
+        return ERR_B_INTEGER_OUT_OF_RANGE;
     }
 
-    screen->perm_attrs.paper = paper;
-    screen->temp_attrs.paper = paper;
+    // Pas altijd toe op de actieve tijdelijke print-status
+    apply_paper_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], paper);
+
+    // Indien permanent: werk ook de permanente systeemvariabelen bij
+    if (is_permanent) {
+        apply_paper_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], paper);
+    }
 
     return ERR_0_OK;
 }
-ZxError screen_set_perm_inverse(ZxScreen screen, const uint8_t inverse) {
+ZxError screen_set_inverse(ZxScreen screen, const uint8_t inverse, const bool is_permanent) {
     if (screen == NULL) return ERR_UNKNOWN;
-    if (inverse != 0 && inverse != 1) return ERR_UNKNOWN;
+    if (inverse != 0 && inverse != 1) {
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
 
-    screen->perm_attrs.inverse = inverse;
-    screen->temp_attrs.inverse = inverse;
+    // 1. Pas altijd toe op de tijdelijke vlag (bit 2)
+    if (inverse == 1) {
+        screen[SYSVAR_P_FLAG] |= ATTR_T_INV_MASK;
+    } else {
+        screen[SYSVAR_P_FLAG] &= ~ATTR_T_INV_MASK;
+    }
+
+    // 2. Indien permanent: pas ook toe op de permanente vlag (bit 6)
+    if (is_permanent) {
+        if (inverse == 1) {
+            screen[SYSVAR_P_FLAG] |= ATTR_P_INV_MASK;
+        } else {
+            screen[SYSVAR_P_FLAG] &= ~ATTR_P_INV_MASK;
+        }
+    }
+
     return ERR_0_OK;
 }
-ZxError screen_set_perm_over(ZxScreen screen, const uint8_t over) {
+ZxError screen_set_over(ZxScreen screen, const uint8_t over, const bool is_permanent) {
     if (screen == NULL) return ERR_UNKNOWN;
-    if (over != 0 && over != 1) return ERR_UNKNOWN;
+    if (over != 0 && over != 1) {
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
 
-    screen->perm_attrs.over = over;
-    screen->temp_attrs.over = over;
+    // 1. Pas altijd toe op de tijdelijke vlag (bit 0)
+    if (over == 1) {
+        screen[SYSVAR_P_FLAG] |= ATTR_T_OVER_MASK;
+    } else {
+        screen[SYSVAR_P_FLAG] &= ~ATTR_T_OVER_MASK;
+    }
+
+    // 2. Indien permanent: pas ook toe op de permanente vlag (bit 4)
+    if (is_permanent) {
+        if (over == 1) {
+            screen[SYSVAR_P_FLAG] |= ATTR_P_OVER_MASK;
+        } else {
+            screen[SYSVAR_P_FLAG] &= ~ATTR_P_OVER_MASK;
+        }
+    }
+
     return ERR_0_OK;
 }
 
 //Attribuut beheer temp
-void screen_set_temp_attrs(ZxScreen screen, const ZxPrintAttributes *attrs) {
-    if (screen == NULL || attrs == NULL) return;
-
-    screen->temp_attrs = *attrs;
-}
-ZxPrintAttributes screen_get_temp_attrs(ZxScreen screen) {
-    if (screen == NULL) return (ZxPrintAttributes){0};
-    return screen->temp_attrs;
-}
-ZxError screen_set_temp_flash(ZxScreen screen, const uint8_t flash) {
-    if (screen == NULL) return ERR_UNKNOWN;
-
-    if (flash != 0 && flash != 1 && flash != 8) {
-        return ERR_UNKNOWN;
-    }
-
-    screen->temp_attrs.flash = flash;
-
-    return ERR_0_OK;
-}
-ZxError screen_set_temp_bright(ZxScreen screen, const uint8_t bright) {
-    if (screen == NULL) return ERR_UNKNOWN;
-
-    if (bright != 0 && bright != 1 && bright != 8) {
-        return ERR_UNKNOWN;
-    }
-
-    screen->temp_attrs.bright = bright;
-
-    return ERR_0_OK;
-}
-ZxError screen_set_temp_ink(ZxScreen screen, const uint8_t ink) {
-    if (screen == NULL) return ERR_UNKNOWN;
-
-    if (ink > 8) {
-        return ERR_UNKNOWN;
-    }
-
-    screen->temp_attrs.ink = ink;
-
-    return ERR_0_OK;
-}
-ZxError screen_set_temp_paper(ZxScreen screen, const uint8_t paper) {
-    if (screen == NULL) return ERR_UNKNOWN;
-
-    if (paper > 8) {
-        return ERR_UNKNOWN;
-    }
-
-    screen->temp_attrs.paper = paper;
-
-    return ERR_0_OK;
-}
-ZxError screen_set_temp_inverse(ZxScreen screen, const uint8_t inverse) {
-    if (screen == NULL) return ERR_UNKNOWN;
-    if (inverse != 0 && inverse != 1) return ERR_UNKNOWN;
-
-    screen->temp_attrs.inverse = inverse;
-    return ERR_0_OK;
-}
-ZxError screen_set_temp_over(ZxScreen screen, const uint8_t over) {
-    if (screen == NULL) return ERR_UNKNOWN;
-    if (over != 0 && over != 1) return ERR_UNKNOWN;
-
-    screen->temp_attrs.over = over;
-    return ERR_0_OK;
-}
 void screen_reset_temp_attrs(ZxScreen screen) {
     if (screen == NULL) return;
-    screen->temp_attrs = screen->perm_attrs;
+
+    screen[SYSVAR_ATTR_T] = screen[SYSVAR_ATTR_P];
+    screen[SYSVAR_MASK_T] = screen[SYSVAR_MASK_P];
+
+    // Kopieer permanente INVERSE & OVER (bits 6 en 4) terug naar tijdelijk (bits 2 en 0)
+    uint8_t p_flags = screen[SYSVAR_P_FLAG];
+    screen[SYSVAR_P_FLAG] = (p_flags & 0x50) | ((p_flags >> 4) & 0x05);
 }
 
 //Write and read txt
 bool screen_put_txt_char(ZxScreen screen, const uint8_t character) {
     if (screen == NULL) return false;
 
-    uint8_t current_attr = screen->vram[screen->main_cursor_y][screen->main_cursor_x].attribute;
-    uint8_t final_attr = combine_attributes(current_attr, &screen->temp_attrs);
+    const uint8_t x = screen_get_txt_cursor_x(screen);
+    const uint8_t y = screen_get_txt_cursor_y(screen);
 
-    ZxCell cell = {character, final_attr};
-    screen->vram[screen->main_cursor_y][screen->main_cursor_x] = cell;
+    const int offset = (y * SCREEN_COLS) + x;
+
+    // Schrijf karakter en tijdelijk attribuut direct in de 64K bak
+    screen[VRAM_CHARS_START + offset] = character;
+
+    // 1. Combineer met VRAM op basis van het transparantie-masker
+    uint8_t cur_attr = screen[VRAM_ATTRS_START + offset];
+    uint8_t mask = screen[SYSVAR_MASK_T];
+    uint8_t attr = screen[SYSVAR_ATTR_T];
+    uint8_t final_attr = (cur_attr & mask) | (attr & ~mask);
+
+    // 2. Pas tijdelijke INVERSE toe (wissel de laagste 3 bits met bits 3..5)
+    if (screen[SYSVAR_P_FLAG] & ATTR_T_INV_MASK) {
+        uint8_t ink = final_attr & 0x07;
+        uint8_t paper = (final_attr >> 3) & 0x07;
+        final_attr = (final_attr & 0xC0) | (ink << 3) | paper;
+    }
+
+    screen[VRAM_ATTRS_START + offset] = final_attr;
 
     return screen_txt_advance_x(screen);
 }
 bool screen_txt_new_line(ZxScreen screen) {
     if (screen == NULL) return false;
 
-    screen->main_cursor_x = 0;
-    screen->main_cursor_y++;
+    uint8_t y = screen_get_txt_cursor_y(screen);
 
-    if (screen->main_cursor_y >= MAIN_SCREEN_ROWS) {
-        screen->main_cursor_y = MAIN_SCREEN_ROWS - 1; // Blijf op regel 21
+    if (++y >= MAIN_SCREEN_ROWS) {
+        y = MAIN_SCREEN_ROWS - 1;
 
-        memmove(&screen->vram[0][0], &screen->vram[1][0], (MAIN_SCREEN_ROWS - 1) * SCREEN_COLS * sizeof(ZxCell));
+        memmove(&screen[VRAM_CHARS_START], &screen[VRAM_CHARS_START + 32], (MAIN_SCREEN_ROWS - 1) * SCREEN_COLS);
+        memmove(&screen[VRAM_ATTRS_START], &screen[VRAM_ATTRS_START + 32], (MAIN_SCREEN_ROWS - 1) * SCREEN_COLS);
 
-        uint8_t blank_attr = combine_attributes(0, &screen->perm_attrs);
         for (int x = 0; x < SCREEN_COLS; x++) {
-            screen->vram[MAIN_SCREEN_ROWS - 1][x].character = ZX_CHAR_SPACE;
-            screen->vram[MAIN_SCREEN_ROWS - 1][x].attribute = blank_attr;
+            const int offset = (y * SCREEN_COLS) + x;
+            screen[VRAM_CHARS_START + offset] = ZX_CHAR_SPACE;
+            screen[VRAM_ATTRS_START + offset] = screen[SYSVAR_ATTR_P];
         }
+
+        screen_set_txt_cursor(screen, y, 0);
 
         return true;
     }
+
+    screen_set_txt_cursor(screen, y, 0);
 
     return false;
 }
 bool screen_txt_advance_x(ZxScreen screen) {
     if (screen == NULL) return false;
 
-    screen->main_cursor_x++;
-    if (screen->main_cursor_x >= SCREEN_COLS) {
+    uint8_t x = screen_get_txt_cursor_x(screen);
+    uint8_t y = screen_get_txt_cursor_y(screen);
+
+    if (++x >= SCREEN_COLS) {
         return screen_txt_new_line(screen);
     }
+
+    screen_set_txt_cursor(screen, y, x);
 
     return false;
 }
 void screen_set_txt_cursor(ZxScreen screen, const uint8_t y, const uint8_t x) {
-    if (screen == NULL) return;
-    screen->main_cursor_y = y;
-    screen->main_cursor_x = x;
+    if (!screen) return;
+    screen[SYSVAR_S_POSN_ROW] = 24 - y;
+    screen[SYSVAR_S_POSN_COL] = 33 - x;
 }
 uint8_t screen_get_txt_cursor_x(ZxScreen screen) {
-    return screen->main_cursor_x;
+    return 33 - screen[SYSVAR_S_POSN_COL];
 }
 uint8_t screen_get_txt_cursor_y(ZxScreen screen) {
-    return screen->main_cursor_y;
+    return 24 - screen[SYSVAR_S_POSN_ROW];
 }
 
 //Write and read sys
@@ -328,51 +334,69 @@ void screen_clear_sys(ZxScreen screen) {
 
     for (uint8_t y = MAIN_SCREEN_ROWS; y < MAIN_SCREEN_ROWS + 2; y++) {
         for (uint8_t x = 0; x < SCREEN_COLS; x++) {
-            screen->vram[y][x].character = ' ';
-            screen->vram[y][x].attribute = SYS_DEFAULT_ATTR;
+            int offset = y * SCREEN_COLS + x;
+            screen[VRAM_CHARS_START + offset] = ZX_CHAR_SPACE;
+            screen[VRAM_ATTRS_START + offset] = SYS_DEFAULT_ATTR;
         }
     }
-    screen->sys_cursor_x = 0;
-    screen->sys_cursor_y = 0;
+
+    screen_set_sys_cursor(screen, 0, 0);
 }
 void screen_put_sys_char(ZxScreen screen, const uint8_t character) {
     if (screen == NULL) return;
 
-    uint8_t physical_y = MAIN_SCREEN_ROWS + screen->sys_cursor_y; // Altijd netjes regel 22 of 23
-    ZxCell cell = {character, SYS_DEFAULT_ATTR};
-    screen->vram[physical_y][screen->sys_cursor_x] = cell;
+    uint8_t x = screen_get_sys_cursor_x(screen);
+    uint8_t y = screen_get_sys_cursor_y(screen);
+
+    uint8_t physical_y = MAIN_SCREEN_ROWS + y; // Altijd netjes regel 22 of 23
+
+    int offset = physical_y * SCREEN_COLS + x;
+
+    screen[VRAM_CHARS_START + offset] = character;
+    screen[VRAM_ATTRS_START + offset] = SYS_DEFAULT_ATTR;
 
     // Optioneel: sys cursor opschuiven
-    screen->sys_cursor_x++;
-    if (screen->sys_cursor_x >= SCREEN_COLS) {
-        screen->sys_cursor_x = 0;
-        screen->sys_cursor_y = (screen->sys_cursor_y == 0) ? 1 : 0;
+    x++;
+    if (x >= SCREEN_COLS) {
+        x = 0;
+        y = (y == 0) ? 1 : 0;
     }
+    screen_set_sys_cursor(screen, y, x);
 }
-void screen_set_sys_cursor(ZxScreen screen, const uint8_t y, const uint8_t x) {
-    if (screen == NULL) return;
-    screen->sys_cursor_y = (y > 1) ? 1 : y;
-    screen->sys_cursor_x = (x >= SCREEN_COLS) ? SCREEN_COLS - 1 : x;
+void screen_set_sys_cursor(ZxScreen screen, const uint8_t rel_y, const uint8_t x) {
+    if (!screen) return;
+    uint8_t physical_y = 22 + (rel_y > 1 ? 1 : rel_y);
+    screen[SYSVAR_S_POSNL_ROW] = 24 - physical_y;
+    screen[SYSVAR_S_POSNL_COL] = 33 - x;
 }
 uint8_t screen_get_sys_cursor_x(ZxScreen screen) {
-    return screen->sys_cursor_x;
+    return 33 - screen[SYSVAR_S_POSNL_COL];
 }
 uint8_t screen_get_sys_cursor_y(ZxScreen screen) {
-    return screen->sys_cursor_y;
+    uint8_t physical_y = 24 - screen[SYSVAR_S_POSNL_ROW];
+    return (physical_y >= 22) ? (physical_y - 22) : 0;
 }
 
-//ZxCell getters
-const ZxCell* screen_get_cell(ZxScreen screen, const int y, const int x) {
-    if (screen == NULL) return NULL;
-
-    if ((y < 0 || y >= TOTAL_SCREEN_ROWS) || (x < 0 || x >= SCREEN_COLS)) {
-        return NULL;
+//character getters
+uint8_t screen_get_char(ZxScreen screen, const int y, const int x) {
+    if (screen == NULL || y < 0 || y >= TOTAL_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
+        return ZX_CHAR_SPACE;
     }
-
-    return &screen->vram[y][x];
+    return screen[VRAM_CHARS_START + (y * SCREEN_COLS) + x];
 }
-const ZxCell* screen_get_buffer(ZxScreen screen) {
-    if (screen == NULL) return NULL;
 
-    return *screen->vram;
+uint8_t screen_get_attr(ZxScreen screen, const int y, const int x) {
+    if (screen == NULL || y < 0 || y >= TOTAL_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
+        return SYS_DEFAULT_ATTR;
+    }
+    return screen[VRAM_ATTRS_START + (y * SCREEN_COLS) + x];
+}
+const uint8_t* screen_get_chars_buffer(ZxScreen screen) {
+    if (screen == NULL) return NULL;
+    return &screen[VRAM_CHARS_START];
+}
+
+const uint8_t* screen_get_attrs_buffer(ZxScreen screen) {
+    if (screen == NULL) return NULL;
+    return &screen[VRAM_ATTRS_START];
 }

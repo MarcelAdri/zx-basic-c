@@ -85,8 +85,7 @@ const char* UI_get_text_screen_utf8(ZxMachine machine) {
 
     for (int y = 0; y < 22; y++) {
         for (int x = 0; x < 32; x++) {
-            const ZxCell *cell = screen_get_cell(screen, y, x);
-            uint8_t token = cell->character;
+            const uint8_t token = screen_get_char(screen, y, x);
 
             const char *utf8_char = get_printable_content_from_token(token);
             size_t len = strlen(utf8_char);
@@ -108,10 +107,17 @@ const char* UI_get_text_screen_utf8(ZxMachine machine) {
     return screen_utf8_buffer;
 }
 EMSCRIPTEN_KEEPALIVE
-const ZxCell* UI_get_vram_buffer(ZxMachine machine) {
+const uint8_t* UI_get_chars_buffer(ZxMachine machine) {
     if (machine == NULL) return NULL;
     ZxScreen screen = machine_get_screen(machine);
-    return screen_get_buffer(screen);
+    return screen_get_chars_buffer(screen);
+}
+
+EMSCRIPTEN_KEEPALIVE
+const uint8_t* UI_get_attrs_buffer(ZxMachine machine) {
+    if (machine == NULL) return NULL;
+    ZxScreen screen = machine_get_screen(machine);
+    return screen_get_attrs_buffer(screen);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -219,8 +225,7 @@ const char* UI_get_system_screen_utf8(ZxMachine machine) {
     for (int y = 0; y < 2; y++) {
         for (int x = 0; x < 32; x++) {
             int cursor_y = y + MAIN_SCREEN_ROWS;
-            const ZxCell *cell = screen_get_cell(screen, cursor_y, x);
-            uint8_t token = cell->character;
+            const uint8_t token = screen_get_char(screen, cursor_y, x);
 
             const char *utf8_char = get_printable_content_from_token(token);
             size_t len = strlen(utf8_char);

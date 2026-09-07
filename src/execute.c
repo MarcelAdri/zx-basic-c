@@ -357,36 +357,36 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
     switch (modifier) {
         case ZX_STATEMENT_INK: {
             int ink_val = (int)modifier_value;
-            if (ink_val < 0 || ink_val > 7) { // Straks ink_val > 8 voor transparant TODO
+            if (ink_val < 0 || ink_val > 8) {
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_perm_ink(screen, (uint8_t)ink_val);
+            return screen_set_ink(screen, (uint8_t)ink_val, true);
         }
 
         case ZX_STATEMENT_PAPER: {
             int paper_val = (int)modifier_value;
-            if (paper_val < 0 || paper_val > 7) { // Straks ink_val > 8 voor transparant TODO
+            if (paper_val < 0 || paper_val > 8) {
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_perm_paper(screen, (uint8_t)paper_val);
+            return screen_set_paper(screen, (uint8_t)paper_val, true);
         }
         case ZX_STATEMENT_FLASH: {
             int flash_val = (int)modifier_value;
-            if (flash_val < 0 || flash_val > 1) {
+            if (flash_val != 0 && flash_val != 1 && flash_val != 8) {
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_perm_flash(screen, (uint8_t)flash_val);
+            return screen_set_flash(screen, (uint8_t)flash_val, true);
         }
         case ZX_STATEMENT_BRIGHT: {
             int bright_val = (int)modifier_value;
-            if (bright_val < 0 || bright_val > 1) {
+            if (bright_val != 0 && bright_val != 1 && bright_val != 8) {
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_perm_bright(screen, (uint8_t)bright_val);
+            return screen_set_bright(screen, (uint8_t)bright_val, true);
         }
         case ZX_STATEMENT_INVERSE: {
             int inverse_val = (int)modifier_value;
@@ -394,7 +394,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_perm_inverse(screen, (uint8_t)inverse_val);
+            return screen_set_inverse(screen, (uint8_t)inverse_val, true);
         }
         case ZX_STATEMENT_OVER: {
             int over_val = (int)modifier_value;
@@ -402,7 +402,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_perm_over(screen, (uint8_t)over_val);
+            return screen_set_over(screen, (uint8_t)over_val, true);
         }
         default:
             return ERR_UNKNOWN;
@@ -681,35 +681,35 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 continue;
             }
             if (modifier == ZX_STATEMENT_INK) {
-                if (mod_value < 0 || mod_value > 7) {
+                if (mod_value < 0 || mod_value > 8) {
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_temp_ink(screen, (uint8_t)mod_value);
+                screen_set_ink(screen, (uint8_t)mod_value, false);
                 continue;
             }
             if (modifier == ZX_STATEMENT_PAPER) {
-                if (mod_value < 0 || mod_value > 7) {
+                if (mod_value < 0 || mod_value > 8) {
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_temp_paper(screen, (uint8_t)mod_value);
+                screen_set_paper(screen, (uint8_t)mod_value, false);
                 continue;
             }
             if (modifier == ZX_STATEMENT_FLASH) {
-                if (mod_value < 0 || mod_value > 1) {
+                if (mod_value != 0 && mod_value != 1 && mod_value != 8) {
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_temp_flash(screen, (uint8_t)mod_value);
+                screen_set_flash(screen, (uint8_t)mod_value, false);
                 continue;
             }
             if (modifier == ZX_STATEMENT_BRIGHT) {
-                if (mod_value < 0 || mod_value > 1) {
+                if (mod_value != 0 && mod_value != 1 && mod_value != 8) {
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_temp_bright(screen, (uint8_t)mod_value);
+                screen_set_bright(screen, (uint8_t)mod_value, false);
                 continue;
             }
             if (modifier == ZX_STATEMENT_INVERSE) {
@@ -717,7 +717,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_temp_inverse(screen, (uint8_t)mod_value);
+                screen_set_inverse(screen, (uint8_t)mod_value, false);
                 continue;
             }
             if (modifier == ZX_STATEMENT_OVER) {
@@ -725,7 +725,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_temp_over(screen, (uint8_t)mod_value);
+                screen_set_over(screen, (uint8_t)mod_value, false);
                 continue;
             }
         }

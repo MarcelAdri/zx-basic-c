@@ -13,6 +13,9 @@
 #define MAX_TOKEN_SENTENCE_LEN 200
 #define MAX_GO_SUB_STACK_SIZE 100
 
+#define MEMORY_SIZE 65536
+#define ROM_SIZE 16384
+
 typedef struct Machine* ZxMachine;
 typedef void (*ZxPrintCallback)(const char *text);
 

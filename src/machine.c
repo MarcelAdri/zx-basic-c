@@ -18,35 +18,35 @@
 #define NOT_FOUND (-1)
 
 #define ZX_MAX_BASIC_RAM 41500
-
+#define SYSVAR_FRAMES 23672
 
 
 
 
 
 typedef struct Machine {
+    // 1. Emulator executie-status
     ZxState state;
     ZxWaitReason wait_reason;
     uint16_t wait_reason_resume_line;
-
     uint32_t pause_start_frame;
     int pause_length;
 
-    ZxScreen screen;
-
+    // 2. I/O en Scherm driver
     uint8_t current_pressed_key;
+    ZxPrintCallback print_callback;
 
+    // 3. Gestructureerde BASIC programmaruimte
     ZxLine program_memory[10000];
+    size_t used_basic_ram;
     uint16_t current_edit_line;
     uint16_t top_line_in_list;
-    size_t used_basic_ram;
-
     uint16_t current_line;
     uint8_t current_statement;
-
     uint16_t old_line;
     uint8_t old_statement;
 
+    // 4. Gestructureerde variabelen en stacks
     ZxGoSub go_sub_stack[MAX_GO_SUB_STACK_SIZE];
     uint8_t go_sub_stack_index;
 
@@ -61,12 +61,13 @@ typedef struct Machine {
     int numeric_variable_count;
     size_t numeric_variable_capacity;
 
-    ZxPrintCallback print_callback;
-
     uint32_t rng_state;
-    uint32_t frame_counter;
 
+    // 5. De 64K fysieke RAM/ROM backing-store voor PEEK, POKE, VRAM en SysVars
+    uint8_t memory[MEMORY_SIZE];
 } Machine;
+
+static void machine_set_frames(ZxMachine machine, uint32_t frames);
 
 static void sanitize_variabele_name(char *dest, const char *src, const size_t max_len) {
     size_t dest_idx = 0;
@@ -123,11 +124,8 @@ static NumericVariable* find_or_create_numeric_variable(ZxMachine machine, const
 }
 ZxMachine machine_create(void) {
     Machine* machine = malloc(sizeof(Machine));
+    if (machine == NULL) return NULL;
     memset(machine, 0, sizeof(Machine));
-
-    if (machine == NULL) {
-        return NULL;
-    }
 
     machine_reset(machine);
 
@@ -408,7 +406,7 @@ void machine_reset(ZxMachine machine) {
         }
     }
 
-    machine->screen = screen_create();
+    screen_init(machine->memory);
 
     // --- 3. Reset de machine status ---
     machine_set_state(machine, ZX_STATE_IDLE);
@@ -423,33 +421,32 @@ void machine_reset(ZxMachine machine) {
     machine->current_statement = 1;
     machine->current_edit_line = 0;
     machine_set_rng_state(machine, 12345);
-    machine->frame_counter = 0;
+    machine_set_frames(machine, 0);
     machine->pause_start_frame = 0;
     machine->pause_length = -1;
 }
 void machine_destroy(ZxMachine machine) {
     if (machine != NULL) {
         machine_reset(machine);
-        screen_destroy(machine->screen);
 
         free(machine);
     }
 }
 ZxScreen machine_get_screen(ZxMachine machine) {
     if (machine == NULL) return NULL;
-    return machine->screen;
+    return machine->memory;
 }
 void machine_txt_new_line(ZxMachine machine) {
-    if (machine == NULL || machine->screen == NULL) return;
+    if (machine == NULL) return;
 
-    if (screen_txt_new_line(machine->screen)) {
+    if (screen_txt_new_line(machine->memory)) {
         machine->wait_reason = ZX_WAIT_SCROLL;
     }
 }
 void machine_put_txt_char(ZxMachine machine, const uint8_t c) {
-    if (machine == NULL || machine->screen == NULL) return;
+    if (machine == NULL) return;
 
-    if (screen_put_txt_char(machine->screen, c)) {
+    if (screen_put_txt_char(machine->memory, c)) {
         machine->wait_reason = ZX_WAIT_SCROLL;
     }
 }
@@ -511,35 +508,30 @@ void machine_print_value(ZxMachine machine, const ZxValue value) {
 void machine_print_to_system(ZxMachine machine, const char *text) {
     if (machine == NULL || text == NULL) return;
 
-    screen_clear_sys(machine->screen);
+    screen_clear_sys(machine->memory);
 
     size_t len = strlen(text);
     for (size_t i = 0; i < len && i < 64; i++) {
-        screen_put_sys_char(machine->screen, text[i]);
+        screen_put_sys_char(machine->memory, text[i]);
     }
+}
+static void machine_set_frames(ZxMachine machine, const uint32_t frames) {
+    if (machine == NULL) return;
+    machine->memory[SYSVAR_FRAMES]     = (uint8_t)(frames & 0xFF);
+    machine->memory[SYSVAR_FRAMES + 1] = (uint8_t)((frames >> 8) & 0xFF);
+    machine->memory[SYSVAR_FRAMES + 2] = (uint8_t)((frames >> 16) & 0xFF);
 }
 uint32_t machine_get_frames(ZxMachine machine) {
     if (machine == NULL) return 0;
-    return machine->frame_counter;
+
+    return ((uint32_t)machine->memory[SYSVAR_FRAMES]) |
+           (((uint32_t)machine->memory[SYSVAR_FRAMES + 1]) << 8) |
+           (((uint32_t)machine->memory[SYSVAR_FRAMES + 2]) << 16);
 }
 void machine_tick_frame(ZxMachine machine) {
     if (machine == NULL) return;
-    machine->frame_counter++;
 
-    if (machine_get_wait_reason(machine) == ZX_WAIT_PAUSE) {
-        uint32_t start_frame = machine_get_pause_start_frame(machine);
-        uint32_t current_frame = machine_get_frames(machine);
-        int pause_length = machine_get_pause_length(machine);
-        if (pause_length == -1 || pause_length == 0) {
-            return;
-        }
-        if ((current_frame - start_frame) >= pause_length) {
-            machine_set_wait_reason(machine, ZX_WAIT_NONE);
-            machine_set_pause_length(machine, -1);
-            machine_set_pause_start_frame(machine, 0);
-        }
-        return;
-    }
+    machine_set_frames(machine, machine_get_frames(machine) + 1);
 }
 uint32_t machine_get_pause_start_frame(ZxMachine machine) {
     if (machine == NULL) return 0;
@@ -703,5 +695,20 @@ ZxError machine_pop_go_sub_stack(ZxMachine machine, uint16_t *out_line, uint8_t 
     machine->go_sub_stack_index--;
     *out_line = machine->go_sub_stack[machine->go_sub_stack_index].return_line;
     *out_statement = machine->go_sub_stack[machine->go_sub_stack_index].return_statement;
+    return ERR_0_OK;
+}
+ZxError machine_peek(ZxMachine machine, const int address, uint8_t *out_value) {
+    if (machine == NULL || out_value == NULL) return ERR_UNKNOWN;
+    if (address < 0 || address >= MEMORY_SIZE) return ERR_B_INTEGER_OUT_OF_RANGE;
+    *out_value = machine->memory[address];
+    return ERR_0_OK;
+}
+
+ZxError machine_poke(ZxMachine machine, const int address, const uint8_t value) {
+    if (machine == NULL) return ERR_UNKNOWN;
+    if (address < 0 || address >= MEMORY_SIZE) return ERR_B_INTEGER_OUT_OF_RANGE;
+    if (address >= ROM_SIZE) {
+        machine->memory[address] = value;
+    }
     return ERR_0_OK;
 }

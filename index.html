@@ -442,8 +442,10 @@
         ctx.font = "900 15px 'Courier New', monospace";
         ctx.textBaseline = "top";
 
-        const vramPtr = Module.ccall('UI_get_vram_buffer', 'number', ['number'], [spectrumMachinePointer]);
-        if (!vramPtr) return;
+        // Vraag de twee directe pointers op naar karakters en attributen in WASM
+        const charsPtr = Module.ccall('UI_get_chars_buffer', 'number', ['number'], [spectrumMachinePointer]);
+        const attrsPtr = Module.ccall('UI_get_attrs_buffer', 'number', ['number'], [spectrumMachinePointer]);
+        if (!charsPtr || !attrsPtr) return;
 
         const isFlashInverted = Module.ccall('UI_get_flash_invert', 'boolean', ['number'], [spectrumMachinePointer]);
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
@@ -451,11 +453,10 @@
         const cellW = 16;
         const cellH = 16;
 
-        // 1. Teken de 768 VRAM cellen (achtergrond + karakters)
+        // 1. Teken de 768 VRAM cellen (24 rijen van 32 kolommen)
         for (let i = 0; i < 768; i++) {
-            const offset = vramPtr + (i * 2);
-            const charCode = Module.HEAPU8[offset];
-            const attr = Module.HEAPU8[offset + 1];
+            const charCode = Module.HEAPU8[charsPtr + i];
+            const attr = Module.HEAPU8[attrsPtr + i];
 
             const x = (i % 32) * cellW;
             const y = Math.floor(i / 32) * cellH;

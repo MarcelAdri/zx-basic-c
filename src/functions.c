@@ -172,10 +172,7 @@ static ZxError zx_function_attr(ZxMachine machine, const ZxValue argument1, cons
     if ((y < INT_MIN|| y >= INT_MAX) || (x < INT_MIN || x >= INT_MAX))
         return ERR_B_INTEGER_OUT_OF_RANGE;
 
-    const ZxCell *cell = screen_get_cell(screen, (int)y, (int)x);
-    if (cell == NULL) return ERR_B_INTEGER_OUT_OF_RANGE;
-
-    const double result_value = cell->attribute;
+    const double result_value = screen_get_attr(screen, (int)y, (int)x);
     return zx_assign_number(result_value, result);
 }
 static ZxError zx_function_chr_string(const ZxValue argument, ZxValue *result) {
@@ -279,11 +276,9 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
         return ERR_B_INTEGER_OUT_OF_RANGE;
 
     ZxScreen screen = machine_get_screen(machine);
-    const ZxCell *cell = screen_get_cell(screen, (int)y_val, (int)x_val);
-    if (cell == NULL) {
-        return ERR_B_INTEGER_OUT_OF_RANGE;
-    }
-    return zx_assign_string(&cell->character, 1, result);
+
+    const uint8_t character = screen_get_char(screen, (int)y_val, (int)x_val);
+    return zx_assign_string(&character, 1, result);
 }
 static ZxError zx_function_sgn(const ZxValue argument, ZxValue *result) {
     double arg;

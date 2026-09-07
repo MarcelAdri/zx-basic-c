@@ -602,6 +602,71 @@ static ZxError execute_cmd_pause(ZxMachine machine, const uint8_t *cmd, size_t o
     machine_set_pause_start_frame(machine, machine_get_frames(machine));
     return ERR_0_OK;
 }
+static ZxError execute_cmd_poke(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    if (output_size <=1) return ERR_C_NONSENSE_IN_BASIC;
+
+    uint8_t cursor = 1;
+
+    //Get address
+    ZxError err;
+    ZxValue address_val;
+    zx_init_value(&address_val);
+    size_t bytes_read;
+    err = solve_expression(machine, cmd + cursor, output_size - cursor, &address_val, &bytes_read);
+    if (err != ERR_0_OK) return err;
+
+    double address_dbl;
+    err = zx_get_number(address_val, &address_dbl);
+    if (err != ERR_0_OK) {
+        zx_free_string(&address_val);
+        return err;
+    }
+    if (address_dbl < 0 || address_dbl > MEMORY_SIZE) {
+        zx_free_string(&address_val);
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
+    int address = (int)round(address_dbl);
+    zx_free_string(&address_val);
+
+    cursor += bytes_read;
+
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+
+    if (cursor >= output_size || cmd[cursor] != ZX_CHAR_COMMA) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+    cursor++;
+    if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+    //Get Value
+    ZxValue value_val;
+    zx_init_value(&value_val);
+    err = solve_expression(machine, cmd + cursor, output_size - cursor, &value_val, &bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&address_val);
+        return err;
+    }
+    cursor += bytes_read;
+    double value_dbl;
+    err = zx_get_number(value_val, &value_dbl);
+    if (err != ERR_0_OK) {
+        zx_free_string(&value_val);
+        return err;
+    }
+    int value_int = (int)round(value_dbl);
+    zx_free_string(&value_val);
+
+    if (value_int < -255 || value_int > 255) return ERR_B_INTEGER_OUT_OF_RANGE;
+
+    uint8_t value = (uint8_t)(value_int & 0xFF);
+
+    while (cursor < output_size && is_zx_space(cmd[cursor])) cursor++;
+    if (cursor < output_size) {
+        return ERR_C_NONSENSE_IN_BASIC;
+    }
+
+    return machine_poke(machine, address, value);
+}
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     ZxScreen screen = machine_get_screen(machine);
     if (screen == NULL) return ERR_0_OK;
@@ -986,6 +1051,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_new(machine);
         case ZX_STATEMENT_PAUSE:
             return execute_cmd_pause(machine, input, input_size);
+        case ZX_STATEMENT_POKE:
+            return execute_cmd_poke(machine, input, input_size);
         case ZX_STATEMENT_PRINT:
             return execute_cmd_print(machine, input, input_size);
         case ZX_STATEMENT_RANDOMIZE:

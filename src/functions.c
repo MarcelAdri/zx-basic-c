@@ -253,6 +253,21 @@ static ZxError zx_function_ln(const ZxValue argument, ZxValue *result) {
     }
     return zx_assign_number(log(arg), result);
 }
+static ZxError zx_function_peek(ZxMachine machine, const ZxValue address, ZxValue *result) {
+    double address_val;
+    ZxError err = zx_get_number(address, &address_val);
+    if (err != ERR_0_OK) {
+        return err;
+    }
+    if ((address_val < 0|| address_val >= MEMORY_SIZE))
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    int address_int = (int)address_val;
+    uint8_t value;
+    err = machine_peek(machine, address_int, &value);
+    if (err != ERR_0_OK) return err;
+
+    return zx_assign_number((double)value, result);
+}
 static ZxError zx_function_pi(ZxValue *result) {
     return zx_assign_number(ZX_ROM_PI, result);
 }
@@ -480,7 +495,7 @@ ZxError zx_function_call_1_arg(ZxMachine machine, const uint8_t function, const 
         case ZX_FUN_LN:
             return zx_function_ln(argument, result);
         case ZX_FUN_PEEK:
-            return ERR_NOT_YET_IMPLEMENTED;
+            return zx_function_peek(machine, argument, result);
         case ZX_FUN_SGN:
             return zx_function_sgn(argument, result);
         case ZX_FUN_SIN:

@@ -91,5 +91,7 @@ ZxError machine_loop_set(ZxMachine machine, const char *var_name, uint16_t retur
 ZxError machine_loop_get(ZxMachine machine, const char *var_name, ZxLoopControl **out_loop_control);
 ZxError machine_push_go_sub_stack(ZxMachine machine, uint16_t line_number, uint8_t statement);
 ZxError machine_pop_go_sub_stack(ZxMachine machine, uint16_t *out_line, uint8_t *out_statement);
+ZxError machine_peek(ZxMachine machine, int address, uint8_t *out_value);
+ZxError machine_poke(ZxMachine machine, int address, uint8_t value);
 
 #endif //ZX_BASIC_C_MACHINE_H

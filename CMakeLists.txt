@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(zx_basic_c VERSION 0.7.2 LANGUAGES C)
+project(zx_basic_c VERSION 0.7.3 LANGUAGES C)
 
 # Vertel CMake dat hij een gegenereerd headerbestand moet maken
 # op basis van onze template 'version.h.in'
@@ -43,6 +43,8 @@ add_executable(zx_basic_c src/main.c
         include/main.h
         src/screen.c
         include/screen.h
+        src/rom.c
+        include/rom.h
 )
 
 target_include_directories(zx_basic_c PRIVATE include)

@@ -479,8 +479,20 @@
             ctx.fillRect(x, y, cellW, cellH);
 
             if (charCode > 32 && charCode < 127) {
-                ctx.fillStyle = ZX_PALETTE[ink];
-                ctx.fillText(String.fromCharCode(charCode), x + 4, y + 1);
+                if (charCode > 32) {
+                    let charToDraw = "";
+
+                    if (charCode < 127) {
+                        charToDraw = String.fromCharCode(charCode);
+                    } else if (charCode === 127) {
+                        charToDraw = "©"; // Sinclair copyright
+                    }
+
+                    if (charToDraw !== "") {
+                        ctx.fillStyle = ZX_PALETTE[ink];
+                        ctx.fillText(charToDraw, x + 4, y + 1);
+                    }
+                }
             }
         }
 

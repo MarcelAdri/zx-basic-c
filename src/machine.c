@@ -13,6 +13,7 @@
 #include "zx_types.h"
 #include "helpers.h"
 #include "characters.h"
+#include "rom.h"
 #include "screen.h"
 
 #define NOT_FOUND (-1)
@@ -408,6 +409,9 @@ void machine_reset(ZxMachine machine) {
 
     screen_init(machine->memory);
 
+    //ROM
+    memcpy(machine->memory, ZX48_ROM, ZX48_ROM_SIZE);
+
     // --- 3. Reset de machine status ---
     machine_set_state(machine, ZX_STATE_IDLE);
     machine->wait_reason = ZX_WAIT_NONE;
@@ -456,24 +460,30 @@ void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback) {
     }
 }
 static void machine_print_to_text(ZxMachine machine, const uint8_t *tokens, size_t len) {
-    assert(tokens != NULL && "tokens mag nooit NULL zijn in deze interne functie");
-    if (machine == NULL || len == 0) return;
+    if (machine == NULL || tokens == NULL || len == 0) return;
 
-    char formatted_text[2048] = {0};
-    ZxError err = build_zx_sentence(tokens, len, formatted_text);
-    if (err != ERR_0_OK) return;
+    for (size_t i = 0; i < len; i++) {
+        uint8_t token = tokens[i];
 
-    size_t formatted_len = strlen(formatted_text);
-
-    for (size_t i = 0; i < formatted_len; i++) {
-        char c = formatted_text[i];
-
-        if (c == '\n' || c == '\r') {
+        if (token == '\n' || token == '\r') {
             machine_txt_new_line(machine);
             continue;
         }
 
-        machine_put_txt_char(machine, (uint8_t)c);
+        // Jouw bereik: 32 t/m 164 is altijd exact 1 schermcel (ASCII, ©, UDG, graphics)
+        if (token >= 32 && token <= 164) {
+            machine_put_txt_char(machine, token);
+        }
+        // Keywords (>= 165): expanderen naar losse letters (bijv. tijdens LIST)
+        else if (token >= 165) {
+            const char *word = get_content_from_token(token);
+            if (word != NULL) {
+                size_t wlen = strlen(word);
+                for (size_t k = 0; k < wlen; k++) {
+                    machine_put_txt_char(machine, (uint8_t)word[k]);
+                }
+            }
+        }
     }
 }
 void machine_print_value(ZxMachine machine, const ZxValue value) {

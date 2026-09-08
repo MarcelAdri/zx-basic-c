@@ -18,7 +18,8 @@
 #include "zx_types.h"
 
 // De exacte 5-byte ROM waarde van PI op de ZX Spectrum (ROM adres 1A70)
-#define ZX_ROM_PI 3.14159265
+//#define ZX_ROM_PI 3.14159265
+#define ZX_ROM_PI_ADDRESS 13006
 
 static uint32_t generate_random_int(ZxMachine machine);
 
@@ -268,8 +269,29 @@ static ZxError zx_function_peek(ZxMachine machine, const ZxValue address, ZxValu
 
     return zx_assign_number((double)value, result);
 }
-static ZxError zx_function_pi(ZxValue *result) {
-    return zx_assign_number(ZX_ROM_PI, result);
+static ZxError zx_function_pi(ZxMachine machine, ZxValue *result) {
+    uint8_t mantisse[4];
+
+    for (int i = 0; i < 4; i++) {
+        ZxError err = machine_peek(machine, ZX_ROM_PI_ADDRESS + i + 1, &mantisse[i]);
+        if (err != ERR_0_OK) return err;
+    }
+
+    uint32_t mantisse_val =
+        ((uint32_t)(mantisse[0] | 0x80) <<24) |
+            (uint32_t)(mantisse[1] << 16) |
+                (uint32_t)(mantisse[2] << 8) |
+                    (uint32_t)mantisse[3];
+    double mantisse_val_dbl = (double)mantisse_val / 4294967296.0; //2^32
+
+    uint8_t raw_header;
+    ZxError err = machine_peek(machine, ZX_ROM_PI_ADDRESS, &raw_header);
+    if (err != ERR_0_OK) return err;
+    int power = raw_header & 0x0F;
+
+    double pi_val = ldexp(mantisse_val_dbl, power + 1);
+
+    return zx_assign_number(pi_val, result);
 }
 static ZxError zx_function_rnd(ZxMachine machine, ZxValue *result) {
     uint32_t x = generate_random_int(machine);
@@ -443,7 +465,7 @@ ZxError zx_function_call_no_arg(ZxMachine machine, const uint8_t function, ZxVal
         case ZX_FUN_INKEY_S:
             return zx_function_inkey_s(machine, result);
         case ZX_FUN_PI:
-            return zx_function_pi(result);
+            return zx_function_pi(machine, result);
         case ZX_FUN_RND:
             return zx_function_rnd(machine, result);
     }

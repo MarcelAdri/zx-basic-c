@@ -22,6 +22,94 @@
 #include "execute.h"
 #include "expressions.h"
 
+static double float_to_double(const uint8_t mantisse[4], const int power) {
+    bool is_negative = (mantisse[0] & 0x80) != 0;
+
+    uint32_t mantisse_val =
+            ((uint32_t)(mantisse[0] | 0x80) << 24) |
+            ((uint32_t)mantisse[1] << 16) |
+            ((uint32_t)mantisse[2] << 8) |
+            (uint32_t)mantisse[3];
+
+    double value = ldexp((double)mantisse_val / 4294967296.0, power); //2^32
+
+    return is_negative ? -value : value;
+}
+
+static ZxError decode_compressed_rom_float(ZxMachine machine, uint16_t address, double *result, int *bytes_consumed) {
+    if (machine == NULL || result == NULL) return ERR_UNKNOWN;
+
+    uint8_t raw_header = 0;
+    ZxError err = machine_peek(machine, address, &raw_header);
+    if (err != ERR_0_OK) return err;
+
+    // Mantisse ophalen
+    uint8_t mantisse[4] = {0, 0, 0, 0};
+    uint8_t mask = (raw_header >> 4) & 0x0F; // De 4 bits van de hoge nibble
+    uint16_t current_addr = address + 1;
+    uint8_t bytes_read = 1; // Begint op 1 vanwege de headerbyte zelf
+
+    for (int i = 0; i < 4; i++) {
+        // Test bit 3 (i=0), bit 2 (i=1), bit 1 (i=2), bit 0 (i=3)
+        if (mask & (1 << (3 - i))) {
+            ZxError peek_err = machine_peek(machine, current_addr++, &mantisse[i]);
+            if (peek_err != ERR_0_OK) return peek_err;
+            bytes_read++;
+        }
+    }
+
+    if (bytes_consumed != NULL) {
+        *bytes_consumed = bytes_read;
+    }
+
+
+    int power = raw_header & 0x0F;
+    *result = float_to_double(mantisse, power);
+
+    return ERR_0_OK;
+}
+static ZxError decode_5byte_float(ZxMachine machine, uint16_t address, double *result) {
+    if (machine == NULL || result == NULL) return ERR_UNKNOWN;
+
+    //power
+    int power;
+    uint8_t exp_byte;
+    ZxError err = machine_peek(machine, address, &exp_byte);
+    if (err != ERR_0_OK) return err;
+
+    if (exp_byte == 0) {
+        *result = 0.0;
+        return ERR_0_OK;
+    }
+
+    power = (int)exp_byte - 128;
+
+    //mantisse
+    uint8_t mantisse[4];
+    for (int i = 0; i < 4; i++) {
+        err = machine_peek(machine, address + i + 1, &mantisse[i]);
+        if (err != ERR_0_OK) return err;
+    }
+
+    *result = float_to_double(mantisse, power);
+
+    return ERR_0_OK;
+}
+
+ZxError zx_decode_float(ZxMachine machine, const uint16_t address, double *result, int *bytes_consumed) {
+    if (machine == NULL || result == NULL) return ERR_UNKNOWN;
+
+    // Constanten- en Chebyshev-tabel in de Sinclair ROM (0x32CE t/m 0x33A0)
+    if (address >= 0x32CE && address <= 0x33A0) {
+        return decode_compressed_rom_float(machine, address, result, bytes_consumed);
+    }
+
+    // Alle andere geheugenlocaties (RAM-variabelen, inline getallen na 0x0E in BASIC)
+    if (bytes_consumed != NULL) {
+        *bytes_consumed = 5;
+    }
+    return decode_5byte_float(machine, address, result);
+}
 ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic) {
     if (machine == NULL) return ERR_UNKNOWN;
 

@@ -270,28 +270,12 @@ static ZxError zx_function_peek(ZxMachine machine, const ZxValue address, ZxValu
     return zx_assign_number((double)value, result);
 }
 static ZxError zx_function_pi(ZxMachine machine, ZxValue *result) {
-    uint8_t mantisse[4];
-
-    for (int i = 0; i < 4; i++) {
-        ZxError err = machine_peek(machine, ZX_ROM_PI_ADDRESS + i + 1, &mantisse[i]);
-        if (err != ERR_0_OK) return err;
-    }
-
-    uint32_t mantisse_val =
-        ((uint32_t)(mantisse[0] | 0x80) <<24) |
-            (uint32_t)(mantisse[1] << 16) |
-                (uint32_t)(mantisse[2] << 8) |
-                    (uint32_t)mantisse[3];
-    double mantisse_val_dbl = (double)mantisse_val / 4294967296.0; //2^32
-
-    uint8_t raw_header;
-    ZxError err = machine_peek(machine, ZX_ROM_PI_ADDRESS, &raw_header);
+    double half_pi;
+    ZxError err = zx_decode_float(machine, ZX_ROM_PI_ADDRESS, &half_pi, NULL);
     if (err != ERR_0_OK) return err;
-    int power = raw_header & 0x0F;
 
-    double pi_val = ldexp(mantisse_val_dbl, power + 1);
-
-    return zx_assign_number(pi_val, result);
+    // Verdubbel pi/2 naar pi:
+    return zx_assign_number(half_pi * 2.0, result);
 }
 static ZxError zx_function_rnd(ZxMachine machine, ZxValue *result) {
     uint32_t x = generate_random_int(machine);

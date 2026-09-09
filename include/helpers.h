@@ -8,6 +8,7 @@
 #include "zx_types.h"
 #include "machine.h"
 
+ZxError zx_decode_float(ZxMachine machine, uint16_t address, double *result, int *bytes_consumed);
 ZxError list_program(ZxMachine *machine, uint16_t start_line, bool is_automatic);
 ZxError make_double(const char *text, double *out_float);
 ZxError formatted_number(double number, uint8_t *out_string, size_t out_string_size, size_t *bytes_written);

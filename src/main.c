@@ -11,6 +11,8 @@
 #include "helpers.h"
 #include "main.h"
 
+#include "screen.h"
+
 // Dit zorgt ervoor dat Emscripten-functies beschikbaar zijn als we voor het web compileren
 #ifdef __EMSCRIPTEN__
     #include <emscripten.h>
@@ -65,6 +67,54 @@ ZxMachine UI_machine_create(void) {
     return machine;
 }
 EMSCRIPTEN_KEEPALIVE
+void UI_render_input_line(ZxMachine machine, const uint8_t *tokens, size_t length, size_t cursor_pos, char cursor_mode) {
+    if (machine == NULL) return;
+
+    // 1. Wis de onderste twee regels van VRAM
+    screen_clear_sys(machine);
+
+    char left_text[512] = {0};
+    char right_text[512] = {0};
+
+    // 2. Converteer tokens vóór en na de cursor naar tekst
+    if (cursor_pos > 0 && tokens != NULL) {
+        build_zx_sentence(tokens, cursor_pos, left_text);
+    }
+    if (tokens != NULL && length > cursor_pos) {
+        build_zx_sentence(tokens + cursor_pos, length - cursor_pos, right_text);
+    }
+
+    size_t total_chars = strlen(left_text) + 1 + strlen(right_text); // +1 voor het cursorblok
+
+    // 3. Bepaal startregel:
+    // Past het op 1 regel (<= 32)? Begin onderaan op regel 23 (rel_y = 1).
+    // Langer dan 32 tekens? Begin bovenaan op regel 22 (rel_y = 0),
+    // zodat regel 1 boven staat en regel 2 er netjes onder op regel 23 verschijnt.
+    uint8_t start_y = (total_chars <= 32) ? 1 : 0;
+    screen_set_sys_cursor(machine, start_y, 0);
+
+    // 4. Tekst vóór de cursor printen
+    for (size_t i = 0; left_text[i] != '\0'; i++) {
+        screen_put_sys_char(machine, (uint8_t)left_text[i]);
+    }
+
+    // 5. Knipperend Sinclair cursorblok met actieve modus (K, L, E, F, G)
+    screen_put_sys_char_attr(machine, (uint8_t)cursor_mode, 0x87);
+
+    // 6. Tekst na de cursor printen
+    for (size_t i = 0; right_text[i] != '\0'; i++) {
+        screen_put_sys_char(machine, (uint8_t)right_text[i]);
+    }
+}
+EMSCRIPTEN_KEEPALIVE
+uint32_t* UI_get_framebuffer_ptr(void) {
+    return screen_get_framebuffer();
+}
+EMSCRIPTEN_KEEPALIVE
+void UI_update_frame(ZxMachine machine, bool flash_state) {
+    screen_render_frame(machine, flash_state);
+}
+EMSCRIPTEN_KEEPALIVE
 void UI_machine_destroy(ZxMachine machine) {
     machine_destroy(machine);
 }
@@ -72,54 +122,6 @@ EMSCRIPTEN_KEEPALIVE
 int UI_translate_keypress(char key, char mode) {
     return get_token_from_key(key, mode);
 }
-EMSCRIPTEN_KEEPALIVE
-const char* UI_get_text_screen_utf8(ZxMachine machine) {
-    static char screen_utf8_buffer[4096];
-
-    screen_utf8_buffer[0] = '\0';
-    char *ptr = screen_utf8_buffer;
-    size_t remaining = sizeof(screen_utf8_buffer);
-
-    ZxScreen screen = machine_get_screen(machine);
-    if (screen == NULL) return "";
-
-    for (int y = 0; y < 22; y++) {
-        for (int x = 0; x < 32; x++) {
-            const uint8_t token = screen_get_char(screen, y, x);
-
-            const char *utf8_char = get_printable_content_from_token(token);
-            size_t len = strlen(utf8_char);
-
-            if (remaining > len + 1) {
-                strcpy(ptr, utf8_char);
-                ptr += len;
-                remaining -= len;
-            }
-        }
-        if (remaining > 2) {
-            *ptr++ = '\n';
-            remaining--;
-        }
-    }
-
-    *ptr = '\0';
-
-    return screen_utf8_buffer;
-}
-EMSCRIPTEN_KEEPALIVE
-const uint8_t* UI_get_chars_buffer(ZxMachine machine) {
-    if (machine == NULL) return NULL;
-    ZxScreen screen = machine_get_screen(machine);
-    return screen_get_chars_buffer(screen);
-}
-
-EMSCRIPTEN_KEEPALIVE
-const uint8_t* UI_get_attrs_buffer(ZxMachine machine) {
-    if (machine == NULL) return NULL;
-    ZxScreen screen = machine_get_screen(machine);
-    return screen_get_attrs_buffer(screen);
-}
-
 EMSCRIPTEN_KEEPALIVE
 bool UI_get_flash_invert(ZxMachine machine) {
     if (machine == NULL) return false;
@@ -210,41 +212,6 @@ void UI_request_edit_current_line(ZxMachine machine) {
     if (tokens_len > 0) {
          UI_trigger_edit(line_number, tokens, tokens_len);
     }
-}
-EMSCRIPTEN_KEEPALIVE
-const char* UI_get_system_screen_utf8(ZxMachine machine) {
-    static char screen_utf8_buffer[4096];
-
-    screen_utf8_buffer[0] = '\0';
-    char *ptr = screen_utf8_buffer;
-    size_t remaining = sizeof(screen_utf8_buffer);
-
-    ZxScreen screen = machine_get_screen(machine);
-    if (screen == NULL) return "";
-
-    for (int y = 0; y < 2; y++) {
-        for (int x = 0; x < 32; x++) {
-            int cursor_y = y + MAIN_SCREEN_ROWS;
-            const uint8_t token = screen_get_char(screen, cursor_y, x);
-
-            const char *utf8_char = get_printable_content_from_token(token);
-            size_t len = strlen(utf8_char);
-
-            if (remaining > len + 1) {
-                strcpy(ptr, utf8_char);
-                ptr += len;
-                remaining -= len;
-            }
-        }
-        if (remaining > 2) {
-            *ptr++ = '\n';
-            remaining--;
-        }
-    }
-
-    *ptr = '\0';
-
-    return screen_utf8_buffer;
 }
 EMSCRIPTEN_KEEPALIVE
 const char* UI_format_zx_line(const uint8_t *buffer, const size_t length) {

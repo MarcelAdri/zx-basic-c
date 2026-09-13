@@ -6,7 +6,6 @@
 #define ZX_BASIC_C_MACHINE_H
 #include "errors.h"
 #include "zx_types.h"
-#include "screen.h"
 #include <stdbool.h>
 
 #define MAX_TEXT_SENTENCE_LEN 256
@@ -70,7 +69,6 @@ uint32_t machine_get_rng_state(ZxMachine machine);
 void machine_clear_variables(ZxMachine machine);
 void machine_reset(ZxMachine machine);
 void machine_destroy(ZxMachine machine);
-ZxScreen machine_get_screen(ZxMachine machine);
 void machine_txt_new_line(ZxMachine machine);
 void machine_put_txt_char(ZxMachine machine, uint8_t c);
 void machine_set_print_callback(ZxMachine machine, ZxPrintCallback callback);

@@ -405,6 +405,8 @@
         if (cursorPosition < 0) cursorPosition = 0;
         if (cursorPosition > inputBytes.length) cursorPosition = inputBytes.length;
 
+        syncInputLineToVram();
+
         renderScreens(); // Herteken het canvas direct bij elke toetsaanslag!
     }
 
@@ -432,6 +434,11 @@
         "#000000", "#0000D7", "#D70000", "#D700D7", "#00D700", "#00D7D7", "#D7D700", "#D7D7D7",
         "#000000", "#0000FF", "#FF0000", "#FF00FF", "#00FF00", "#00FFFF", "#FFFF00", "#FFFFFF"
     ];
+    // --- OFFSCREEN RENDERING BUFFERS VOOR WASM RGBA ---
+    let framebufferPtr = null;
+    let offscreenCanvas = null;
+    let offscreenCtx = null;
+    let zxImageData = null;
 
     function renderScreens() {
         if (!spectrumMachinePointer) return;
@@ -439,99 +446,52 @@
         const canvas = document.getElementById("zx-canvas");
         const ctx = canvas.getContext("2d");
 
-        ctx.font = "900 15px 'Courier New', monospace";
-        ctx.textBaseline = "top";
-
-        // Vraag de twee directe pointers op naar karakters en attributen in WASM
-        const charsPtr = Module.ccall('UI_get_chars_buffer', 'number', ['number'], [spectrumMachinePointer]);
-        const attrsPtr = Module.ccall('UI_get_attrs_buffer', 'number', ['number'], [spectrumMachinePointer]);
-        if (!charsPtr || !attrsPtr) return;
-
-        const isFlashInverted = Module.ccall('UI_get_flash_invert', 'boolean', ['number'], [spectrumMachinePointer]);
-        const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
-
-        const cellW = 16;
-        const cellH = 16;
-
-        // 1. Teken de 768 VRAM cellen (24 rijen van 32 kolommen)
-        for (let i = 0; i < 768; i++) {
-            const charCode = Module.HEAPU8[charsPtr + i];
-            const attr = Module.HEAPU8[attrsPtr + i];
-
-            const x = (i % 32) * cellW;
-            const y = Math.floor(i / 32) * cellH;
-
-            let ink = attr & 0x07;
-            let paper = (attr >> 3) & 0x07;
-            const bright = (attr & 0x40) !== 0 ? 8 : 0;
-            const flash = (attr & 0x80) !== 0;
-
-            ink += bright;
-            paper += bright;
-
-            if (flash && isFlashInverted) {
-                const temp = ink;
-                ink = paper;
-                paper = temp;
-            }
-
-            ctx.fillStyle = ZX_PALETTE[paper];
-            ctx.fillRect(x, y, cellW, cellH);
-
-            if (charCode > 32 && charCode < 127) {
-                if (charCode > 32) {
-                    let charToDraw = "";
-
-                    if (charCode < 127) {
-                        charToDraw = String.fromCharCode(charCode);
-                    } else if (charCode === 127) {
-                        charToDraw = "©"; // Sinclair copyright
-                    }
-
-                    if (charToDraw !== "") {
-                        ctx.fillStyle = ZX_PALETTE[ink];
-                        ctx.fillText(charToDraw, x + 4, y + 1);
-                    }
-                }
-            }
+        // 1. Initialiseer de offscreen 256x192 canvas eenmalig
+        if (!offscreenCanvas) {
+            offscreenCanvas = document.createElement("canvas");
+            offscreenCanvas.width = 256;
+            offscreenCanvas.height = 192;
+            offscreenCtx = offscreenCanvas.getContext("2d");
+            zxImageData = offscreenCtx.createImageData(256, 192);
+            framebufferPtr = Module.ccall('UI_get_framebuffer_ptr', 'number', [], []);
         }
 
-        // 2. Als de machine op invoer wacht (IDLE): teken de invoerregel op regel 23
-        if (state === ZxState.IDLE) {
-            const inputY = 23 * cellH;
+        // 2. Laat C de 32-bits RGBA framebuffer vullen
+        const isFlashInverted = Module.ccall('UI_get_flash_invert', 'boolean', ['number'], [spectrumMachinePointer]);
+        Module.ccall('UI_update_frame', 'void', ['number', 'boolean'], [spectrumMachinePointer, isFlashInverted]);
 
-            // Maak regel 23 eerst egaal wit/grijs (PAPER 7)
-            ctx.fillStyle = ZX_PALETTE[7];
-            ctx.fillRect(0, inputY, 512, cellH);
+        // 3. Kopieer 256x192x4 bytes in één snelle geheugenslag
+        const wasmPixels = new Uint8Array(Module.HEAPU8.buffer, framebufferPtr, 256 * 192 * 4);
+        zxImageData.data.set(wasmPixels);
+        offscreenCtx.putImageData(zxImageData, 0, 0);
 
-            const leftText = getFormattedLine(inputBytes.slice(0, cursorPosition));
-            const rightText = getFormattedLine(inputBytes.slice(cursorPosition));
+        // 4. Teken pixel-perfect (2x geschaald) op het 512x384 canvas
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(offscreenCanvas, 0, 0, 512, 384);
+    }
+    function syncInputLineToVram() {
+        if (!spectrumMachinePointer) return;
 
-            // Teken de tekst links van de cursor (INK 0)
-            ctx.fillStyle = ZX_PALETTE[0];
-            for (let i = 0; i < leftText.length; i++) {
-                ctx.fillText(leftText[i], i * cellW + 4, inputY + 1);
-            }
+        const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
+        if (state !== ZxState.IDLE) return;
 
-            // Teken het knipperende ZX Spectrum cursorblok (zwart blok met witte letter)
-            const cursorCol = leftText.length;
-            if (cursorCol < 32) {
-                const cursorX = cursorCol * cellW;
-                ctx.fillStyle = ZX_PALETTE[0]; // Zwart blok
-                ctx.fillRect(cursorX, inputY, cellW, cellH);
+        const len = inputBytes.length;
+        const bufferPtr = len > 0 ? Module._malloc(len) : 0;
+        if (len > 0) {
+            Module.HEAPU8.set(inputBytes, bufferPtr);
+        }
 
-                ctx.fillStyle = ZX_PALETTE[7]; // Witte mode-letter (K, L, E, G, F)
-                ctx.fillText(cursorMode, cursorX + 4, inputY + 1);
-            }
+        Module.ccall(
+            'UI_render_input_line',
+            'void',
+            ['number', 'number', 'number', 'number', 'number'],
+            [spectrumMachinePointer, bufferPtr, len, cursorPosition, cursorMode.charCodeAt(0)]
+        );
 
-            // Teken eventuele tekst rechts van de cursor
-            ctx.fillStyle = ZX_PALETTE[0];
-            for (let i = 0; i < rightText.length; i++) {
-                ctx.fillText(rightText[i], (cursorCol + 1 + i) * cellW + 4, inputY + 1);
-            }
+        if (bufferPtr) {
+            Module._free(bufferPtr);
         }
     }
-
     function executeBuffer() {
         if (inputBytes.length === 0) return;
         cursorPosition = inputBytes.length;
@@ -550,6 +510,7 @@
         inputBytes = [];
         setMode('K');
         updateDisplay();
+        syncInputLineToVram();
         renderScreens();
     }
 
@@ -671,18 +632,16 @@
             return;
         }
 
-        // 1. Bereken verstreken echte tijd sinds de vorige animatie-frame
-        const delta = currentTime - lastTime;
+        // Voorkom een 'spiral of death' na een tabbladwissel
+        const delta = Math.min(currentTime - lastTime, 100);
         lastTime = currentTime;
         timeAccumulator += delta;
 
-        // 2. Tik de machine-frames ALLEEN op echte 50 Hz intervallen op
         while (timeAccumulator >= MS_PER_FRAME) {
             Module.ccall('UI_tick_frame', 'void', ['number'], [spectrumMachinePointer]);
             timeAccumulator -= MS_PER_FRAME;
         }
 
-        // 3. Batch en rendering
         const state = Module.ccall('UI_get_machine_state', 'number', ['number'], [spectrumMachinePointer]);
         const waitReason = Module.ccall('UI_get_wait_reason', 'number', ['number'], [spectrumMachinePointer]);
 

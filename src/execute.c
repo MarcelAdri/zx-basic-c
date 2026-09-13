@@ -6,7 +6,6 @@
 #include <string.h>
 #include "execute.h"
 
-#include <stdio.h>
 #include <math.h>
 #include <time.h>
 #include <sys/types.h>
@@ -54,11 +53,8 @@ static ZxError parse_print_modifiers(ZxMachine machine,
 }
 
 static ZxError execute_cmd_cls(ZxMachine machine) {
-    ZxScreen screen = machine_get_screen(machine);
-    if (screen == NULL) return ERR_UNKNOWN;
-
-    screen_clear(screen);
-    return ERR_0_OK;
+    return
+    screen_clear(machine);
 }
 static ZxError execute_cmd_dim(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
@@ -351,9 +347,6 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
         return ERR_C_NONSENSE_IN_BASIC;
     }
 
-    ZxScreen screen = machine_get_screen(machine);
-    if (screen == NULL) return ERR_UNKNOWN;
-
     switch (modifier) {
         case ZX_STATEMENT_INK: {
             int ink_val = (int)modifier_value;
@@ -361,7 +354,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_ink(screen, (uint8_t)ink_val, true);
+            return screen_set_ink(machine, (uint8_t)ink_val, true);
         }
 
         case ZX_STATEMENT_PAPER: {
@@ -370,7 +363,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_paper(screen, (uint8_t)paper_val, true);
+            return screen_set_paper(machine, (uint8_t)paper_val, true);
         }
         case ZX_STATEMENT_FLASH: {
             int flash_val = (int)modifier_value;
@@ -378,7 +371,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_flash(screen, (uint8_t)flash_val, true);
+            return screen_set_flash(machine, (uint8_t)flash_val, true);
         }
         case ZX_STATEMENT_BRIGHT: {
             int bright_val = (int)modifier_value;
@@ -386,7 +379,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_bright(screen, (uint8_t)bright_val, true);
+            return screen_set_bright(machine, (uint8_t)bright_val, true);
         }
         case ZX_STATEMENT_INVERSE: {
             int inverse_val = (int)modifier_value;
@@ -394,7 +387,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_inverse(screen, (uint8_t)inverse_val, true);
+            return screen_set_inverse(machine, (uint8_t)inverse_val, true);
         }
         case ZX_STATEMENT_OVER: {
             int over_val = (int)modifier_value;
@@ -402,7 +395,7 @@ static ZxError execute_cmd_attributes(ZxMachine machine, const uint8_t *cmd, siz
                 return ERR_B_INTEGER_OUT_OF_RANGE;
             }
 
-            return screen_set_over(screen, (uint8_t)over_val, true);
+            return screen_set_over(machine, (uint8_t)over_val, true);
         }
         default:
             return ERR_UNKNOWN;
@@ -519,7 +512,6 @@ static ZxError execute_cmd_next(ZxMachine machine, const uint8_t *cmd, size_t ou
     if (strlen(var_name) != 1 || num_indices != 0) {
         return ERR_C_NONSENSE_IN_BASIC;
     }
-    size_t cursor = bytes_read + 1;
 
     //Countervalue
     ZxValue value;
@@ -643,7 +635,7 @@ static ZxError execute_cmd_poke(ZxMachine machine, const uint8_t *cmd, size_t ou
     zx_init_value(&value_val);
     err = solve_expression(machine, cmd + cursor, output_size - cursor, &value_val, &bytes_read);
     if (err != ERR_0_OK) {
-        zx_free_string(&address_val);
+        zx_free_string(&value_val);
         return err;
     }
     cursor += bytes_read;
@@ -668,10 +660,8 @@ static ZxError execute_cmd_poke(ZxMachine machine, const uint8_t *cmd, size_t ou
     return machine_poke(machine, address, value);
 }
 static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
-    ZxScreen screen = machine_get_screen(machine);
-    if (screen == NULL) return ERR_0_OK;
-
-    screen_reset_temp_attrs(screen);
+    ZxError err = screen_reset_temp_attrs(machine);
+    if (err != ERR_0_OK) return err;
 
     if (output_size <= 1) {
         machine_txt_new_line(machine);
@@ -695,10 +685,15 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             continue;
         }
         if (token == ZX_CHAR_COMMA) {
-            int current_x = screen_get_txt_cursor_x(screen);
-            int current_y = screen_get_txt_cursor_y(screen);
+            uint8_t current_x;
+            err = screen_get_txt_cursor_x(machine, &current_x);
+            if (err != ERR_0_OK) return err;
+            uint8_t current_y;
+            err = screen_get_txt_cursor_y(machine, &current_y);
+            if (err != ERR_0_OK) return err;
             if (current_x < 16) {
-                screen_set_txt_cursor(screen, current_y, 16);
+                err = screen_set_txt_cursor(machine, current_y, 16);
+                if (err != ERR_0_OK) return err;
             } else {
                 machine_txt_new_line(machine);
             }
@@ -718,7 +713,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             uint8_t modifier;
             double mod_value;
             size_t bytes_read = 0;
-            ZxError err = parse_print_modifiers(machine, cmd + cursor, output_size - cursor, &modifier, &mod_value, &bytes_read);
+            err = parse_print_modifiers(machine, cmd + cursor, output_size - cursor, &modifier, &mod_value, &bytes_read);
             if (err != ERR_0_OK) return err;
 
             cursor += bytes_read;
@@ -729,7 +724,9 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                 }
 
                 uint8_t tab_stop_value = (uint16_t)mod_value % 32;
-                const uint8_t current_x = screen_get_txt_cursor_x(screen);
+                uint8_t current_x;
+                err = screen_get_txt_cursor_x(machine, &current_x);
+                if (err != ERR_0_OK) return err;
 
                 uint8_t num_spaces = (tab_stop_value < current_x) ? (32 - current_x) + tab_stop_value : tab_stop_value - current_x;
 
@@ -750,7 +747,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_ink(screen, (uint8_t)mod_value, false);
+                err = screen_set_ink(machine, (uint8_t)mod_value, false);
+                if (err != ERR_0_OK) return err;
                 continue;
             }
             if (modifier == ZX_STATEMENT_PAPER) {
@@ -758,7 +756,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_paper(screen, (uint8_t)mod_value, false);
+                err = screen_set_paper(machine, (uint8_t)mod_value, false);
+                if (err != ERR_0_OK) return err;
                 continue;
             }
             if (modifier == ZX_STATEMENT_FLASH) {
@@ -766,7 +765,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_flash(screen, (uint8_t)mod_value, false);
+                err = screen_set_flash(machine, (uint8_t)mod_value, false);
+                if (err != ERR_0_OK) return err;
                 continue;
             }
             if (modifier == ZX_STATEMENT_BRIGHT) {
@@ -774,7 +774,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_bright(screen, (uint8_t)mod_value, false);
+                err = screen_set_bright(machine, (uint8_t)mod_value, false);
+                if (err != ERR_0_OK) return err;
                 continue;
             }
             if (modifier == ZX_STATEMENT_INVERSE) {
@@ -782,7 +783,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_inverse(screen, (uint8_t)mod_value, false);
+                err = screen_set_inverse(machine, (uint8_t)mod_value, false);
+                if (err != ERR_0_OK) return err;
                 continue;
             }
             if (modifier == ZX_STATEMENT_OVER) {
@@ -790,7 +792,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
                     return ERR_B_INTEGER_OUT_OF_RANGE;
                 }
 
-                screen_set_over(screen, (uint8_t)mod_value, false);
+                err = screen_set_over(machine, (uint8_t)mod_value, false);
+                if (err != ERR_0_OK) return err;
                 continue;
             }
         }
@@ -803,7 +806,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
             ZxValue coord;
             zx_init_value(&coord);
             size_t bytes_read = 0;
-            ZxError err = solve_expression(machine, cmd + cursor, output_size - cursor, &coord, &bytes_read);
+            err = solve_expression(machine, cmd + cursor, output_size - cursor, &coord, &bytes_read);
             if (err != ERR_0_OK) {
                 zx_free_string(&coord);
                 return err;
@@ -854,7 +857,8 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
 
             cursor += bytes_read;
 
-            screen_set_txt_cursor(screen, y, x);
+            err = screen_set_txt_cursor(machine, y, x);
+            if (err != ERR_0_OK) return err;
 
             print_newline = true;
             continue;
@@ -864,7 +868,7 @@ static ZxError execute_cmd_print(ZxMachine machine, const uint8_t *cmd, size_t o
         ZxValue result;
         zx_init_value(&result);
         size_t bytes_read = 0;
-        ZxError err = solve_expression(machine, cmd + cursor, output_size - cursor, &result, &bytes_read);
+        err = solve_expression(machine, cmd + cursor, output_size - cursor, &result, &bytes_read);
         if (err != ERR_0_OK) {
             zx_free_string(&result);
             return err;

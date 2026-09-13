@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 #include "errors.h"
+#include "machine.h"
 
 #define UNDEFINED_KEYSTROKE (-1)
 #define KEYMAP_MODE_KEYWORD 'K'
@@ -16,6 +17,9 @@
 #define KEYMAP_MODE_BELOW 'G'
 
 #define ZX_TOKEN_ESC 27
+
+#define ZX_ADDRESS_BASIC_BITMAP 15616
+#define ZX_ADDRESS_UDG_BITMAP 65368
 
 // ZX Spectrum specifieke tekens en tokens
 #define ZX_TOKEN_MASTER_LIST \
@@ -254,6 +258,8 @@ ZxError build_zx_sentence (const uint8_t *characters, size_t length, char *resul
 const char* get_content_from_token (uint8_t token);
 const char* get_printable_content_from_token (uint8_t token);
 int get_token_from_key (char key, char mode);
+ZxError zx_get_character_bitmap (ZxMachine machine, uint8_t character, uint8_t bitmap[8]);
+ZxError zx_recognize_character (ZxMachine machine, const uint8_t bitmap[8], uint8_t *character);
 ZxError string_to_zx_characters (const char *input, size_t input_length, uint8_t *output, size_t output_length, size_t *bytes_written);
 char get_expected_cursor_mode(const uint8_t *buffer, size_t length);
 bool is_zx_printable_character(uint8_t c);

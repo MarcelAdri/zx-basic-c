@@ -8,39 +8,39 @@
 #include <stdint.h>
 
 #include "errors.h"
+#include "machine.h"
 
 #define MAIN_SCREEN_ROWS 22
 
-typedef uint8_t* ZxScreen;
+ZxError screen_init(ZxMachine machine);
+ZxError screen_clear(ZxMachine machine);
 
-void screen_init(ZxScreen screen);
-void screen_clear(ZxScreen screen);
+ZxError screen_set_flash(ZxMachine machine, uint8_t flash, bool is_permanent);
+ZxError screen_set_bright(ZxMachine machine, uint8_t bright, bool is_permanent);
+ZxError screen_set_ink(ZxMachine machine, uint8_t ink, bool is_permanent);
+ZxError screen_set_paper(ZxMachine machine, uint8_t paper, bool is_permanent);
+ZxError screen_set_inverse(ZxMachine machine, uint8_t inverse, bool is_permanent);
+ZxError screen_set_over(ZxMachine machine, uint8_t over, bool is_permanent);
 
-ZxError screen_set_flash(ZxScreen screen, uint8_t flash, bool is_permanent);
-ZxError screen_set_bright(ZxScreen screen, uint8_t bright, bool is_permanent);
-ZxError screen_set_ink(ZxScreen screen, uint8_t ink, bool is_permanent);
-ZxError screen_set_paper(ZxScreen screen, uint8_t paper, bool is_permanent);
-ZxError screen_set_inverse(ZxScreen screen, uint8_t inverse, bool is_permanent) ;
-ZxError screen_set_over(ZxScreen screen, uint8_t over, bool is_permanent);
+ZxError screen_reset_temp_attrs(ZxMachine machine);
 
-void screen_reset_temp_attrs(ZxScreen screen);
+ZxError screen_put_txt_char(ZxMachine machine, uint8_t character, bool *scroll);
+ZxError screen_txt_new_line(ZxMachine machine, bool *scroll);
+ZxError screen_txt_advance_x(ZxMachine machine, bool *scroll);
+ZxError screen_set_txt_cursor(ZxMachine machine, uint8_t y, uint8_t x);
+ZxError screen_get_txt_cursor_x(ZxMachine machine, uint8_t *x);
+ZxError screen_get_txt_cursor_y(ZxMachine machine, uint8_t *y);
 
-bool screen_put_txt_char(ZxScreen screen, uint8_t character);
-bool screen_txt_new_line(ZxScreen screen);
-bool screen_txt_advance_x(ZxScreen screen);
-void screen_set_txt_cursor(ZxScreen screen, uint8_t y, uint8_t x);
-uint8_t screen_get_txt_cursor_x(ZxScreen screen);
-uint8_t screen_get_txt_cursor_y(ZxScreen screen);
+ZxError screen_clear_sys(ZxMachine machine);
+ZxError screen_put_sys_char_attr(ZxMachine machine, uint8_t character, uint8_t attr);
+ZxError screen_put_sys_char(ZxMachine machine, uint8_t character);
+ZxError screen_set_sys_cursor(ZxMachine machine, uint8_t rel_y, uint8_t x);
+ZxError screen_get_sys_cursor_x(ZxMachine machine, uint8_t *x);
+ZxError screen_get_sys_cursor_y(ZxMachine machine, uint8_t *y);
 
-void screen_clear_sys(ZxScreen screen);
-void screen_put_sys_char(ZxScreen screen, uint8_t character);
-void screen_set_sys_cursor(ZxScreen screen, uint8_t y, uint8_t x);
-uint8_t screen_get_sys_cursor_x(ZxScreen screen);
-uint8_t screen_get_sys_cursor_y(ZxScreen screen);
-
-uint8_t screen_get_char(ZxScreen screen, int y, int x);
-uint8_t screen_get_attr(ZxScreen screen, int y, int x);
-const uint8_t* screen_get_chars_buffer(ZxScreen screen);
-const uint8_t* screen_get_attrs_buffer(ZxScreen screen);
+ZxError screen_get_char(ZxMachine machine, int y, int x, uint8_t *character);
+ZxError screen_get_attr(ZxMachine machine, int y, int x, uint8_t *attributes);
+uint32_t* screen_get_framebuffer(void);
+void screen_render_frame(ZxMachine machine, bool flash_state);
 
 #endif //ZX_BASIC_C_SCREEN_H

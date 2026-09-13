@@ -380,6 +380,85 @@ int get_token_from_key(const char key, const char mode) {
 
     return token > 0 ? token : UNDEFINED_KEYSTROKE;
 }
+ZxError zx_get_character_bitmap (ZxMachine machine, const uint8_t character, uint8_t bitmap[8]) {
+    if (machine == NULL || bitmap == NULL) return ERR_UNKNOWN;
+
+    if (character < 32 || character > 164) {
+        memset(bitmap, 0, 8);
+        return ERR_0_OK;
+    }
+
+    // ROM-font (32..127) of UDG's in RAM (144..164)
+    if (character <= 127 || character >= 144) {
+        uint16_t start_address = (character <= 127)
+            ? ZX_ADDRESS_BASIC_BITMAP + ((uint16_t)(character - 32) * 8)
+            : ZX_ADDRESS_UDG_BITMAP   + ((uint16_t)(character - 144) * 8);
+
+        for (int i = 0; i < 8; i++) {
+            ZxError error = machine_peek(machine, start_address + i, &bitmap[i]);
+            if (error != ERR_0_OK) return error;
+        }
+        return ERR_0_OK;
+    }
+
+    //Blok-graphics
+    uint8_t val = character - 128; // Bereik 0..15
+
+    // Bovenste helft (rij 0..3): Bit 3 = Links, Bit 2 = Rechts
+    uint8_t top_byte = (val & 0x08 ? 0xF0 : 0x00) |
+                       (val & 0x04 ? 0x0F : 0x00);
+
+    // Onderste helft (rij 4..7): Bit 1 = Links, Bit 0 = Rechts
+    uint8_t bottom_byte = (val & 0x02 ? 0xF0 : 0x00) |
+                          (val & 0x01 ? 0x0F : 0x00);
+
+    // Vul de 8 scanlines
+    for (int i = 0; i < 4; i++) {
+        bitmap[i]     = top_byte;
+        bitmap[i + 4] = bottom_byte;
+    }
+
+    return ERR_0_OK;
+}
+ZxError zx_recognize_character (ZxMachine machine, const uint8_t bitmap[8], uint8_t *character) {
+    if (machine == NULL || bitmap == NULL || character == NULL) return ERR_UNKNOWN;
+
+    // ROM-font (32..127) of UDG's in RAM (144..164)
+    const uint8_t start_search[2] = {32, 144};
+    const uint8_t end_search[2] = {127, 164};
+
+    uint8_t test_bitmap[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+    for (int i = 0; i < 2; i++) {
+        for (uint8_t test_character = start_search[i]; test_character <= end_search[i]; test_character++) {
+            ZxError err = zx_get_character_bitmap(machine, test_character, test_bitmap);
+            if (err != ERR_0_OK) return err;
+            if (memcmp(bitmap, test_bitmap, 8) == 0) {
+                *character = test_character;
+                return ERR_0_OK;
+            }
+        }
+    }
+
+    //Blok-graphics
+    const bool test1 = (bitmap[0] == bitmap[1] && bitmap [0] == bitmap[2] && bitmap[0] == bitmap[3]) &&
+                  (bitmap[4] == bitmap[5] && bitmap[4] == bitmap[6] && bitmap[4] == bitmap[7]);
+    const bool test2 = (bitmap[0] == 0x00 || bitmap[0] == 0x0F || bitmap[0] == 0xF0 || bitmap[0] == 0xFF) &&
+                  (bitmap[4] == 0x00 || bitmap[4] == 0x0F || bitmap[4] == 0xF0 || bitmap[4] == 0xFF);
+
+    if (test1 && test2) {
+        const uint8_t bit3 = (bitmap[0] & 0xF0) ? 8 : 0;
+        const uint8_t bit2 = (bitmap[0] & 0x0F) ? 4 : 0;
+        const uint8_t bit1 = (bitmap[4] & 0xF0) ? 2 : 0;
+        const uint8_t bit0 = (bitmap[4] & 0x0F) ? 1 : 0;
+
+        *character = 128 + bit3 + bit2 + bit1 + bit0;
+        return ERR_0_OK;
+    }
+
+    *character = 0;
+    return ERR_0_OK;
+}
 ZxError string_to_zx_characters (const char *input, const size_t input_length, uint8_t *output, const size_t output_length, size_t *bytes_written) {
     if (input == NULL || output == NULL) {
         return ERR_UNKNOWN;
@@ -420,7 +499,7 @@ ZxError build_zx_sentence (const uint8_t *characters, const size_t length, char 
     }
 
     size_t len = 0;
-    for (int i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++) {
         const char *token = ZX_CHARACTERS[characters[i]];
         if (token == NULL) {
             return ERR_UNKNOWN;
@@ -497,13 +576,13 @@ char get_expected_cursor_mode(const uint8_t *buffer, const size_t length) {
 }
 
 bool is_zx_printable_character(const uint8_t c) {
-    if (c >= 32 && c <= 128) {
+    if (c >= 32 && c <= 127) {
         return true;
     }
     return false;
 }
 bool is_zx_graphics_character(const uint8_t c) {
-    if (c >= 129 && c <= 164) {
+    if (c >= 128 && c <= 164) {
         return true;
     }
     return false;

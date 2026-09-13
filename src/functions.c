@@ -15,6 +15,7 @@
 #include "machine.h"
 #include "expressions.h"
 #include "helpers.h"
+#include "screen.h"
 #include "zx_types.h"
 
 // De exacte 5-byte ROM waarde van PI op de ZX Spectrum (ROM adres 1A70)
@@ -157,9 +158,6 @@ static ZxError zx_function_atn(const ZxValue argument, ZxValue *result) {
     return zx_assign_number(atan(arg), result);
 }
 static ZxError zx_function_attr(ZxMachine machine, const ZxValue argument1, const ZxValue argument2, ZxValue *result) {
-    ZxScreen screen = machine_get_screen(machine);
-    if (screen == NULL) return ERR_UNKNOWN;
-
     double y;
     ZxError err = zx_get_number(argument1, &y);
     if (err != ERR_0_OK) {
@@ -173,8 +171,10 @@ static ZxError zx_function_attr(ZxMachine machine, const ZxValue argument1, cons
     if ((y < INT_MIN|| y >= INT_MAX) || (x < INT_MIN || x >= INT_MAX))
         return ERR_B_INTEGER_OUT_OF_RANGE;
 
-    const double result_value = screen_get_attr(screen, (int)y, (int)x);
-    return zx_assign_number(result_value, result);
+    uint8_t result_value;
+    err = screen_get_attr(machine, (int)y, (int)x, &result_value);
+    if (err != ERR_0_OK) return err;
+    return zx_assign_number((double)result_value, result);
 }
 static ZxError zx_function_chr_string(const ZxValue argument, ZxValue *result) {
     double arg;
@@ -197,7 +197,6 @@ static ZxError zx_function_cos(const ZxValue argument, ZxValue *result) {
     return zx_assign_number(cos(arg), result);
 }
 static ZxError zx_function_code(const ZxValue argument, ZxValue *result) {
-    double res;
     uint8_t *arg = NULL;
     size_t arg_len = 0;
     ZxError err = zx_get_string(argument, &arg, &arg_len);
@@ -296,9 +295,9 @@ static ZxError zx_function_screen_s(ZxMachine machine, const ZxValue y, const Zx
     if ((y_val < INT_MIN|| y_val >= INT_MAX) || (x_val < INT_MIN || x_val >= INT_MAX))
         return ERR_B_INTEGER_OUT_OF_RANGE;
 
-    ZxScreen screen = machine_get_screen(machine);
-
-    const uint8_t character = screen_get_char(screen, (int)y_val, (int)x_val);
+    uint8_t character;
+    err = screen_get_char(machine, (int)y_val, (int)x_val, &character);
+    if (err != ERR_0_OK) return err;
     return zx_assign_string(&character, 1, result);
 }
 static ZxError zx_function_sgn(const ZxValue argument, ZxValue *result) {

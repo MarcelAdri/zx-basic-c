@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <ctype.h>
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -407,7 +406,7 @@ void machine_reset(ZxMachine machine) {
         }
     }
 
-    screen_init(machine->memory);
+    screen_init(machine);
 
     //ROM
     memcpy(machine->memory, ZX48_ROM, ZX48_ROM_SIZE);
@@ -436,21 +435,24 @@ void machine_destroy(ZxMachine machine) {
         free(machine);
     }
 }
-ZxScreen machine_get_screen(ZxMachine machine) {
-    if (machine == NULL) return NULL;
-    return machine->memory;
-}
 void machine_txt_new_line(ZxMachine machine) {
     if (machine == NULL) return;
 
-    if (screen_txt_new_line(machine->memory)) {
+    bool scroll;
+    ZxError err = screen_txt_new_line(machine, &scroll);
+    if (err != ERR_0_OK) return;
+
+    if (scroll) {
         machine->wait_reason = ZX_WAIT_SCROLL;
     }
 }
 void machine_put_txt_char(ZxMachine machine, const uint8_t c) {
     if (machine == NULL) return;
 
-    if (screen_put_txt_char(machine->memory, c)) {
+    bool scroll = false;
+    screen_put_txt_char(machine, c, &scroll);
+
+    if (scroll) {
         machine->wait_reason = ZX_WAIT_SCROLL;
     }
 }
@@ -518,11 +520,11 @@ void machine_print_value(ZxMachine machine, const ZxValue value) {
 void machine_print_to_system(ZxMachine machine, const char *text) {
     if (machine == NULL || text == NULL) return;
 
-    screen_clear_sys(machine->memory);
+    screen_clear_sys(machine);
 
     size_t len = strlen(text);
     for (size_t i = 0; i < len && i < 64; i++) {
-        screen_put_sys_char(machine->memory, text[i]);
+        screen_put_sys_char(machine, text[i]);
     }
 }
 static void machine_set_frames(ZxMachine machine, const uint32_t frames) {

@@ -10,10 +10,12 @@
 #define SCREEN_COLS 32
 #define SYSTEM_SCREEN_ROWS 2
 #define TOTAL_SCREEN_ROWS (MAIN_SCREEN_ROWS + SYSTEM_SCREEN_ROWS)
+#define SCAN_LINES 8
 #define SYS_DEFAULT_ATTR 0x38
 
-#define VRAM_CHARS_START   16384  // (Straks voor pixels/karakters)
+#define VRAM_PIXELS_START  16384  // (Straks voor pixels)
 #define VRAM_ATTRS_START   22528  // 768 attribuut-bytes
+#define VRAM_ATTRS_END     23295  // 768 attribuut-bytes
 #define SYSVAR_ATTR_P      23693  // Permanente attributen
 #define SYSVAR_ATTR_T      23695  // Tijdelijke attributen
 #define SYSVAR_MASK_P      23694 // Transparantie
@@ -36,6 +38,30 @@
 #define ATTR_T_INV_MASK 0x04 // 0000 0100
 #define ATTR_T_OVER_MASK 0x01 // 0000 0001
 
+#define SCREEN_WIDTH  (SCREEN_COLS * 8)
+#define SCREEN_HEIGHT (TOTAL_SCREEN_ROWS * 8)
+
+static const uint32_t ZX_PALETTE[16] = {
+    // Normaal (BRIGHT 0) - formaat 0xAABBGGRR voor Little-Endian Canvas
+    0xFF000000, // 0: Black
+    0xFFD70000, // 1: Blue
+    0xFF0000D7, // 2: Red
+    0xFFD700D7, // 3: Magenta
+    0xFF00D700, // 4: Green
+    0xFFD7D700, // 5: Cyan
+    0xFF00D7D7, // 6: Yellow
+    0xFFD7D7D7, // 7: White
+    // Helder (BRIGHT 1)
+    0xFF000000, // 8: Bright Black
+    0xFFFF0000, // 9: Bright Blue
+    0xFF0000FF, // 10: Bright Red
+    0xFFFF00FF, // 11: Bright Magenta
+    0xFF00FF00, // 12: Bright Green
+    0xFFFFFF00, // 13: Bright Cyan
+    0xFF00FFFF, // 14: Bright Yellow
+    0xFFFFFFFF  // 15: Bright White
+};
+static uint32_t rgba_framebuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
 static void apply_flash_bits(uint8_t *attr_byte, uint8_t *mask_byte, uint8_t flash) {
     if (flash == 8) {
         *mask_byte |= ATTR_FLASH_MASK;  // Transparant: masker AAN
@@ -83,320 +109,692 @@ static void apply_ink_bits(uint8_t *attr_byte, uint8_t *mask_byte, uint8_t ink) 
         *attr_byte = (*attr_byte & ~ATTR_INK_MASK) | (ink & 0x07);
     }
 }
+static uint16_t screen_get_pixel_address(uint8_t col, uint8_t row, uint8_t scanline) {
+    if (col >= SCREEN_COLS || row >= TOTAL_SCREEN_ROWS || scanline >= SCAN_LINES) return 0;
 
-// Life Cycle
-void screen_init(ZxScreen screen) {
-    if (screen == NULL) return;
+    uint16_t t = row / 8;     // 0, 1 of 2 (boven, midden, onder)
+    uint16_t r = row % 8;     // 0 t/m 7 (rij binnen het derde deel)
+    uint16_t s = scanline;    // 0 t/m 7 (scanline)
+    uint16_t c = col;         // 0 t/m 31 (kolom)
 
-    // Zet de Sinclair fabrieksinstellingen in het geheugen
-    screen[SYSVAR_ATTR_P] = SYS_DEFAULT_ATTR;
-    screen[SYSVAR_ATTR_T] = SYS_DEFAULT_ATTR;
-    screen[SYSVAR_MASK_P] = 0x00;
-    screen[SYSVAR_MASK_T] = 0x00;
-    screen[SYSVAR_P_FLAG] = 0x00;
-    screen[SYSVAR_BORDCR] = SYS_DEFAULT_ATTR;
-
-    // Wis het scherm met deze standaarden
-    screen_clear(screen);
-    screen_clear_sys(screen);
+    return VRAM_PIXELS_START | (t << 11) | (s << 8) | (r << 5) | c;
 }
-void screen_clear(ZxScreen screen) {
-    if (screen == NULL) return;
+static ZxError screen_sys_scroll_up(ZxMachine machine) {
+    ZxError err;
+    const uint8_t src_row = MAIN_SCREEN_ROWS + 1; // Regel 23
+    const uint8_t dst_row = MAIN_SCREEN_ROWS;     // Regel 22
 
-    screen_reset_temp_attrs(screen);
+    // 1. Pixels van regel 23 naar regel 22 verplaatsen
+    for (uint8_t line = 0; line < SCAN_LINES; line++) {
+        for (uint8_t col = 0; col < SCREEN_COLS; col++) {
+            uint16_t src_addr = screen_get_pixel_address(col, src_row, line);
+            uint16_t dst_addr = screen_get_pixel_address(col, dst_row, line);
+            uint8_t byte = 0;
 
-    uint8_t perm_attr = screen[SYSVAR_ATTR_P];
+            err = machine_peek(machine, src_addr, &byte);
+            if (err != ERR_0_OK) return err;
 
-    for (int y = 0; y < MAIN_SCREEN_ROWS; y++) {
-        for (int x = 0; x < SCREEN_COLS; x++) {
-            int offset = (y * 32) + x;
-            screen[VRAM_CHARS_START + offset] = ZX_CHAR_SPACE;
-            screen[VRAM_ATTRS_START + offset] = perm_attr;
+            err = machine_poke(machine, dst_addr, byte);
+            if (err != ERR_0_OK) return err;
+
+            // Wis pixel op regel 23
+            err = machine_poke(machine, src_addr, 0x00);
+            if (err != ERR_0_OK) return err;
         }
     }
 
-    // Zet cursor terug op (0, 0)
-    screen_set_txt_cursor(screen, 0, 0);
+    // 2. Attributen van regel 23 naar regel 22 verplaatsen
+    for (uint8_t col = 0; col < SCREEN_COLS; col++) {
+        uint16_t src_attr_addr = VRAM_ATTRS_START + (src_row * SCREEN_COLS) + col;
+        uint16_t dst_attr_addr = VRAM_ATTRS_START + (dst_row * SCREEN_COLS) + col;
+        uint8_t attr = SYS_DEFAULT_ATTR;
+
+        err = machine_peek(machine, src_attr_addr, &attr);
+        if (err != ERR_0_OK) return err;
+
+        err = machine_poke(machine, dst_attr_addr, attr);
+        if (err != ERR_0_OK) return err;
+
+        // Reset attribuut op regel 23
+        err = machine_poke(machine, src_attr_addr, SYS_DEFAULT_ATTR);
+        if (err != ERR_0_OK) return err;
+    }
+
+    return ERR_0_OK;
 }
 
-//Attribuut beheer permanent
-ZxError screen_set_flash(ZxScreen screen, const uint8_t flash, const bool is_permanent) {
-    if (screen == NULL) return ERR_UNKNOWN;
+// Life Cycle
+ZxError screen_init(ZxMachine machine) {
+    if (machine == NULL) return ERR_UNKNOWN;
+
+    ZxError err;
+    // Zet de Sinclair fabrieksinstellingen in het geheugen
+    err = machine_poke(machine, SYSVAR_ATTR_P, SYS_DEFAULT_ATTR);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_ATTR_T, SYS_DEFAULT_ATTR);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_MASK_P, 0x00);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_MASK_T, 0x00);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_P_FLAG, 0x00);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_BORDCR, SYS_DEFAULT_ATTR);
+    if (err != ERR_0_OK) return err;
+
+    // Wis het scherm met deze standaarden
+    err = screen_clear(machine);
+    if (err != ERR_0_OK) return err;
+    return screen_clear_sys(machine);
+}
+ZxError screen_clear(ZxMachine machine) {
+    if (machine == NULL) return ERR_UNKNOWN;
+
+    ZxError err;
+    err = screen_reset_temp_attrs(machine);
+    if (err != ERR_0_OK) return err;
+
+    uint8_t perm_attr;
+    err = machine_peek(machine, SYSVAR_ATTR_P, &perm_attr);
+    if (err != ERR_0_OK) return err;
+
+    for (int i = VRAM_PIXELS_START; i < VRAM_ATTRS_START; i++) {
+        err = machine_poke(machine, i, 0x00);
+        if (err != ERR_0_OK) return err;
+    }
+
+    for (int i = VRAM_ATTRS_START; i <= VRAM_ATTRS_END; i++) {
+        err = machine_poke(machine, i, perm_attr);
+        if (err != ERR_0_OK) return err;
+    }
+
+    // Zet cursor terug op (0, 0)
+    return screen_set_txt_cursor(machine, 0, 0);
+}
+
+//Attribuut beheer
+ZxError screen_set_flash(ZxMachine machine, const uint8_t flash, const bool is_permanent) {
+    if (machine == NULL) return ERR_UNKNOWN;
     if (flash != 0 && flash != 1 && flash != 8) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
+    ZxError err;
+    uint8_t attr_byte;
+    uint8_t mask_byte;
 
-    // Pas altijd toe op de actieve tijdelijke print-status
-    apply_flash_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], flash);
+    err = machine_peek(machine, SYSVAR_ATTR_T, &attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_peek(machine, SYSVAR_MASK_T, &mask_byte);
+    if (err != ERR_0_OK) return err;
+
+    apply_flash_bits(&attr_byte, &mask_byte, flash);
+    err = machine_poke(machine, SYSVAR_ATTR_T, attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_MASK_T, mask_byte);
+    if (err != ERR_0_OK) return err;
+
+
 
     // Indien permanent: werk ook de permanente systeemvariabelen bij
     if (is_permanent) {
-        apply_flash_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], flash);
+        err = machine_peek(machine, SYSVAR_ATTR_P, &attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_peek(machine, SYSVAR_MASK_P, &mask_byte);
+        if (err != ERR_0_OK) return err;
+
+        apply_flash_bits(&attr_byte, &mask_byte, flash);
+        err = machine_poke(machine, SYSVAR_ATTR_P, attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_poke(machine, SYSVAR_MASK_P, mask_byte);
+        if (err != ERR_0_OK) return err;
     }
 
     return ERR_0_OK;
 }
-ZxError screen_set_bright(ZxScreen screen, const uint8_t bright, const bool is_permanent) {
-    if (screen == NULL) return ERR_UNKNOWN;
+ZxError screen_set_bright(ZxMachine machine, const uint8_t bright, const bool is_permanent) {
+    if (machine == NULL) return ERR_UNKNOWN;
     if (bright != 0 && bright != 1 && bright != 8) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
+    ZxError err;
+    uint8_t attr_byte;
+    uint8_t mask_byte;
 
-    // Pas altijd toe op de actieve tijdelijke print-status
-    apply_bright_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], bright);
+    err = machine_peek(machine, SYSVAR_ATTR_T, &attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_peek(machine, SYSVAR_MASK_T, &mask_byte);
+    if (err != ERR_0_OK) return err;
+
+    apply_bright_bits(&attr_byte, &mask_byte, bright);
+    err = machine_poke(machine, SYSVAR_ATTR_T, attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_MASK_T, mask_byte);
+    if (err != ERR_0_OK) return err;
 
     // Indien permanent: werk ook de permanente systeemvariabelen bij
     if (is_permanent) {
-        apply_bright_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], bright);
+        err = machine_peek(machine, SYSVAR_ATTR_P, &attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_peek(machine, SYSVAR_MASK_P, &mask_byte);
+        if (err != ERR_0_OK) return err;
+
+        apply_bright_bits(&attr_byte, &mask_byte, bright);
+        err = machine_poke(machine, SYSVAR_ATTR_P, attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_poke(machine, SYSVAR_MASK_P, mask_byte);
+        if (err != ERR_0_OK) return err;
     }
 
     return ERR_0_OK;
 }
-ZxError screen_set_ink(ZxScreen screen, const uint8_t ink, const bool is_permanent) {
-    if (screen == NULL) return ERR_UNKNOWN;
-
+ZxError screen_set_ink(ZxMachine machine, const uint8_t ink, const bool is_permanent) {
+    if (machine == NULL) return ERR_UNKNOWN;
     if (ink > 8) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
+    ZxError err;
+    uint8_t attr_byte;
+    uint8_t mask_byte;
 
-    // Pas altijd toe op de actieve tijdelijke print-status
-    apply_ink_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], ink);
+    err = machine_peek(machine, SYSVAR_ATTR_T, &attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_peek(machine, SYSVAR_MASK_T, &mask_byte);
+    if (err != ERR_0_OK) return err;
+
+    apply_ink_bits(&attr_byte, &mask_byte, ink);
+    err = machine_poke(machine, SYSVAR_ATTR_T, attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_MASK_T, mask_byte);
+    if (err != ERR_0_OK) return err;
 
     // Indien permanent: werk ook de permanente systeemvariabelen bij
     if (is_permanent) {
-        apply_ink_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], ink);
+        err = machine_peek(machine, SYSVAR_ATTR_P, &attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_peek(machine, SYSVAR_MASK_P, &mask_byte);
+        if (err != ERR_0_OK) return err;
+
+        apply_ink_bits(&attr_byte, &mask_byte, ink);
+        err = machine_poke(machine, SYSVAR_ATTR_P, attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_poke(machine, SYSVAR_MASK_P, mask_byte);
+        if (err != ERR_0_OK) return err;
     }
 
     return ERR_0_OK;
 }
-ZxError screen_set_paper(ZxScreen screen, const uint8_t paper, const bool is_permanent) {
-    if (screen == NULL) return ERR_UNKNOWN;
-
+ZxError screen_set_paper(ZxMachine machine, const uint8_t paper, const bool is_permanent) {
+    if (machine == NULL) return ERR_UNKNOWN;
     if (paper > 8) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
+    ZxError err;
+    uint8_t attr_byte;
+    uint8_t mask_byte;
 
-    // Pas altijd toe op de actieve tijdelijke print-status
-    apply_paper_bits(&screen[SYSVAR_ATTR_T], &screen[SYSVAR_MASK_T], paper);
+    err = machine_peek(machine, SYSVAR_ATTR_T, &attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_peek(machine, SYSVAR_MASK_T, &mask_byte);
+    if (err != ERR_0_OK) return err;
+
+    apply_paper_bits(&attr_byte, &mask_byte, paper);
+    err = machine_poke(machine, SYSVAR_ATTR_T, attr_byte);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_MASK_T, mask_byte);
+    if (err != ERR_0_OK) return err;
 
     // Indien permanent: werk ook de permanente systeemvariabelen bij
     if (is_permanent) {
-        apply_paper_bits(&screen[SYSVAR_ATTR_P], &screen[SYSVAR_MASK_P], paper);
+        err = machine_peek(machine, SYSVAR_ATTR_P, &attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_peek(machine, SYSVAR_MASK_P, &mask_byte);
+        if (err != ERR_0_OK) return err;
+
+        apply_paper_bits(&attr_byte, &mask_byte, paper);
+        err = machine_poke(machine, SYSVAR_ATTR_P, attr_byte);
+        if (err != ERR_0_OK) return err;
+        err = machine_poke(machine, SYSVAR_MASK_P, mask_byte);
+        if (err != ERR_0_OK) return err;
     }
 
     return ERR_0_OK;
 }
-ZxError screen_set_inverse(ZxScreen screen, const uint8_t inverse, const bool is_permanent) {
-    if (screen == NULL) return ERR_UNKNOWN;
+ZxError screen_set_inverse(ZxMachine machine, const uint8_t inverse, const bool is_permanent) {
+    if (machine == NULL) return ERR_UNKNOWN;
     if (inverse != 0 && inverse != 1) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
 
+    ZxError err;
+    uint8_t p_flag;
+    err = machine_peek(machine, SYSVAR_P_FLAG, &p_flag);
+    if (err != ERR_0_OK) return err;
+
     // 1. Pas altijd toe op de tijdelijke vlag (bit 2)
     if (inverse == 1) {
-        screen[SYSVAR_P_FLAG] |= ATTR_T_INV_MASK;
+        p_flag |= ATTR_T_INV_MASK;
     } else {
-        screen[SYSVAR_P_FLAG] &= ~ATTR_T_INV_MASK;
+        p_flag &= ~ATTR_T_INV_MASK;
     }
 
     // 2. Indien permanent: pas ook toe op de permanente vlag (bit 6)
     if (is_permanent) {
         if (inverse == 1) {
-            screen[SYSVAR_P_FLAG] |= ATTR_P_INV_MASK;
+            p_flag |= ATTR_P_INV_MASK;
         } else {
-            screen[SYSVAR_P_FLAG] &= ~ATTR_P_INV_MASK;
+            p_flag &= ~ATTR_P_INV_MASK;
         }
     }
-
-    return ERR_0_OK;
+    return machine_poke(machine, SYSVAR_P_FLAG, p_flag);
 }
-ZxError screen_set_over(ZxScreen screen, const uint8_t over, const bool is_permanent) {
-    if (screen == NULL) return ERR_UNKNOWN;
+ZxError screen_set_over(ZxMachine machine, const uint8_t over, const bool is_permanent) {
+    if (machine == NULL) return ERR_UNKNOWN;
     if (over != 0 && over != 1) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
 
-    // 1. Pas altijd toe op de tijdelijke vlag (bit 0)
+    ZxError err;
+    uint8_t p_flag;
+    err = machine_peek(machine, SYSVAR_P_FLAG, &p_flag);
+    if (err != ERR_0_OK) return err;
+
+    // 1. Pas altijd toe op de tijdelijke vlag (bit 2)
     if (over == 1) {
-        screen[SYSVAR_P_FLAG] |= ATTR_T_OVER_MASK;
+        p_flag |= ATTR_T_OVER_MASK;
     } else {
-        screen[SYSVAR_P_FLAG] &= ~ATTR_T_OVER_MASK;
+        p_flag &= ~ATTR_T_OVER_MASK;
     }
 
-    // 2. Indien permanent: pas ook toe op de permanente vlag (bit 4)
+    // 2. Indien permanent: pas ook toe op de permanente vlag (bit 6)
     if (is_permanent) {
         if (over == 1) {
-            screen[SYSVAR_P_FLAG] |= ATTR_P_OVER_MASK;
+            p_flag |= ATTR_P_OVER_MASK;
         } else {
-            screen[SYSVAR_P_FLAG] &= ~ATTR_P_OVER_MASK;
+            p_flag &= ~ATTR_P_OVER_MASK;
         }
     }
-
-    return ERR_0_OK;
+    return machine_poke(machine, SYSVAR_P_FLAG, p_flag);
 }
 
 //Attribuut beheer temp
-void screen_reset_temp_attrs(ZxScreen screen) {
-    if (screen == NULL) return;
+ZxError screen_reset_temp_attrs(ZxMachine machine) {
+    if (machine == NULL) return ERR_UNKNOWN;
 
-    screen[SYSVAR_ATTR_T] = screen[SYSVAR_ATTR_P];
-    screen[SYSVAR_MASK_T] = screen[SYSVAR_MASK_P];
+    ZxError err;
+
+    uint8_t attrs;
+    err = machine_peek(machine, SYSVAR_ATTR_P, &attrs);
+    if (err != ERR_0_OK) return err;
+    uint8_t mask;
+    err = machine_peek(machine, SYSVAR_MASK_P, &mask);
+    if (err != ERR_0_OK) return err;
+
+    err = machine_poke(machine, SYSVAR_ATTR_T, attrs);
+    if (err != ERR_0_OK) return err;
+    err = machine_poke(machine, SYSVAR_MASK_T, mask);
+    if (err != ERR_0_OK) return err;
 
     // Kopieer permanente INVERSE & OVER (bits 6 en 4) terug naar tijdelijk (bits 2 en 0)
-    uint8_t p_flags = screen[SYSVAR_P_FLAG];
-    screen[SYSVAR_P_FLAG] = (p_flags & 0x50) | ((p_flags >> 4) & 0x05);
+    uint8_t p_flags;
+    err = machine_peek(machine, SYSVAR_P_FLAG, &p_flags);
+    if (err != ERR_0_OK) return err;
+    return machine_poke(machine, SYSVAR_P_FLAG, (p_flags & 0x50) | ((p_flags >> 4) & 0x05));
 }
 
 //Write and read txt
-bool screen_put_txt_char(ZxScreen screen, const uint8_t character) {
-    if (screen == NULL) return false;
+ZxError screen_put_txt_char(ZxMachine machine, const uint8_t character, bool *scroll) {
+    if (machine == NULL) return ERR_UNKNOWN;
 
-    const uint8_t x = screen_get_txt_cursor_x(screen);
-    const uint8_t y = screen_get_txt_cursor_y(screen);
+    ZxError err;
+
+    uint8_t x;
+    err = screen_get_txt_cursor_x(machine, &x);
+    if (err != ERR_0_OK) return err;
+
+    uint8_t y;
+    err = screen_get_txt_cursor_y(machine, &y);
+    if (err != ERR_0_OK) return err;
+
+    // 1. Vraag de 8 scanline-bytes op aan de Font Engine
+    uint8_t bitmap[8];
+    err = zx_get_character_bitmap(machine, character, bitmap);
+    if (err != ERR_0_OK) return err;
+
+    // 2. Pas tijdelijke INVERSE toe (wissel de laagste 3 bits met bits 3..5)
+    uint8_t p_flag;
+    err = machine_peek(machine, SYSVAR_P_FLAG, &p_flag);
+    if (err != ERR_0_OK) return err;
+    if (p_flag & ATTR_T_INV_MASK) {
+        for (int i = 0; i < SCAN_LINES; i++) {
+            bitmap[i] = ~bitmap[i]; // Bitwise NOT: alle 0-pixels worden 1, en 1 wordt 0
+        }
+    }
+
+    for (uint8_t scanline = 0; scanline < SCAN_LINES; scanline++) {
+        uint16_t pixel_addr = screen_get_pixel_address(x, y, scanline);
+        uint8_t byte_to_write = bitmap[scanline];
+
+        if (p_flag & ATTR_T_OVER_MASK) {
+            uint8_t cur_pixels = 0;
+            err = machine_peek(machine, pixel_addr, &cur_pixels);
+            if (err != ERR_0_OK) return err;
+            byte_to_write ^= cur_pixels;
+        }
+
+        err = machine_poke(machine, pixel_addr, byte_to_write);
+        if (err != ERR_0_OK) return err;
+    }
 
     const int offset = (y * SCREEN_COLS) + x;
 
-    // Schrijf karakter en tijdelijk attribuut direct in de 64K bak
-    screen[VRAM_CHARS_START + offset] = character;
+    // 3. Schrijf de kleurattribuut-byte alleen weg als OVER 0 is
+    if (!(p_flag & ATTR_T_OVER_MASK)) {
+        uint16_t attr_addr = VRAM_ATTRS_START + (uint16_t)offset;
+        uint8_t cur_attr = 0;
+        err = machine_peek(machine, attr_addr, &cur_attr);
+        if (err != ERR_0_OK) return err;
 
-    // 1. Combineer met VRAM op basis van het transparantie-masker
-    uint8_t cur_attr = screen[VRAM_ATTRS_START + offset];
-    uint8_t mask = screen[SYSVAR_MASK_T];
-    uint8_t attr = screen[SYSVAR_ATTR_T];
-    uint8_t final_attr = (cur_attr & mask) | (attr & ~mask);
+        uint8_t mask = 0;
+        err = machine_peek(machine, SYSVAR_MASK_T, &mask);
+        if (err != ERR_0_OK) return err;
 
-    // 2. Pas tijdelijke INVERSE toe (wissel de laagste 3 bits met bits 3..5)
-    if (screen[SYSVAR_P_FLAG] & ATTR_T_INV_MASK) {
-        uint8_t ink = final_attr & 0x07;
-        uint8_t paper = (final_attr >> 3) & 0x07;
-        final_attr = (final_attr & 0xC0) | (ink << 3) | paper;
+        uint8_t attr = 0;
+        err = machine_peek(machine, SYSVAR_ATTR_T, &attr);
+        if (err != ERR_0_OK) return err;
+
+        uint8_t final_attr = (cur_attr & mask) | (attr & ~mask);
+        err = machine_poke(machine, attr_addr, final_attr);
+        if (err != ERR_0_OK) return err;
     }
 
-    screen[VRAM_ATTRS_START + offset] = final_attr;
-
-    return screen_txt_advance_x(screen);
+    return screen_txt_advance_x(machine, scroll);
 }
-bool screen_txt_new_line(ZxScreen screen) {
-    if (screen == NULL) return false;
+ZxError screen_txt_new_line(ZxMachine machine, bool *scroll) {
+    if (machine == NULL) return ERR_UNKNOWN;
 
-    uint8_t y = screen_get_txt_cursor_y(screen);
+    ZxError err;
+    *scroll = false;
 
-    if (++y >= MAIN_SCREEN_ROWS) {
-        y = MAIN_SCREEN_ROWS - 1;
+    uint8_t cursor_y;
+    err = screen_get_txt_cursor_y(machine, &cursor_y);
+    if (err != ERR_0_OK) return err;
 
-        memmove(&screen[VRAM_CHARS_START], &screen[VRAM_CHARS_START + 32], (MAIN_SCREEN_ROWS - 1) * SCREEN_COLS);
-        memmove(&screen[VRAM_ATTRS_START], &screen[VRAM_ATTRS_START + 32], (MAIN_SCREEN_ROWS - 1) * SCREEN_COLS);
+    if (++cursor_y >= MAIN_SCREEN_ROWS) {
+        *scroll = true;
+        // 1. Pixels 8 scanlines omhoog schuiven (interleaved)
+        for (uint8_t y = 0; y < MAIN_SCREEN_ROWS - 1; y++) {
+            for (uint8_t line = 0; line < SCAN_LINES; line++) {
+                for (uint8_t x = 0; x < SCREEN_COLS; x++) {
+                    uint16_t src = screen_get_pixel_address(x, y + 1, line);
+                    uint16_t dst = screen_get_pixel_address(x, y, line);
+                    uint8_t byte;
 
-        for (int x = 0; x < SCREEN_COLS; x++) {
-            const int offset = (y * SCREEN_COLS) + x;
-            screen[VRAM_CHARS_START + offset] = ZX_CHAR_SPACE;
-            screen[VRAM_ATTRS_START + offset] = screen[SYSVAR_ATTR_P];
+                    err = machine_peek(machine, src, &byte);
+                    if (err != ERR_0_OK) return err;
+
+                    err = machine_poke(machine, dst, byte);
+                    if (err != ERR_0_OK) return err;
+                }
+            }
         }
 
-        screen_set_txt_cursor(screen, y, 0);
+        // 2. Attributen 1 regel omhoog schuiven (volledig lineair!)
+        uint16_t attr_bytes_to_move = (MAIN_SCREEN_ROWS - 1) * SCREEN_COLS;
+        for (uint16_t i = 0; i < attr_bytes_to_move; i++) {
+            uint8_t attr;
+            err = machine_peek(machine, VRAM_ATTRS_START + SCREEN_COLS + i, &attr);
+            if (err != ERR_0_OK) return err;
 
-        return true;
+            err = machine_poke(machine, VRAM_ATTRS_START + i, attr);
+            if (err != ERR_0_OK) return err;
+        }
+
+        // 3. Onderste regel wissen: pixels op 0x00
+        uint8_t bottom_row = MAIN_SCREEN_ROWS - 1;
+        for (uint8_t line = 0; line < SCAN_LINES; line++) {
+            for (uint8_t x = 0; x < SCREEN_COLS; x++) {
+                uint16_t addr = screen_get_pixel_address(x, bottom_row, line);
+                err = machine_poke(machine, addr, 0x00);
+                if (err != ERR_0_OK) return err;
+            }
+        }
+        // 4. Onderste regel wissen: attributen vullen met ATTR_P
+        uint8_t default_attr;
+        err = machine_peek(machine, SYSVAR_ATTR_P, &default_attr);
+        if (err != ERR_0_OK) return err;
+
+        uint16_t bottom_attr_start = VRAM_ATTRS_START + (bottom_row * SCREEN_COLS);
+        for (uint8_t x = 0; x < SCREEN_COLS; x++) {
+            err = machine_poke(machine, bottom_attr_start + x, default_attr);
+            if (err != ERR_0_OK) return err;
+        }
+
+        cursor_y = MAIN_SCREEN_ROWS - 1;
     }
+    return screen_set_txt_cursor(machine, cursor_y, 0);
 
-    screen_set_txt_cursor(screen, y, 0);
-
-    return false;
 }
-bool screen_txt_advance_x(ZxScreen screen) {
-    if (screen == NULL) return false;
+ZxError screen_txt_advance_x(ZxMachine machine, bool *scroll) {
+    if (machine == NULL) return ERR_UNKNOWN;
 
-    uint8_t x = screen_get_txt_cursor_x(screen);
-    uint8_t y = screen_get_txt_cursor_y(screen);
+    *scroll = false;
+
+    uint8_t x;
+    ZxError err = screen_get_txt_cursor_x(machine, &x);
+    if (err != ERR_0_OK) return err;
+
+    uint8_t y;
+    err = screen_get_txt_cursor_y(machine, &y);
+    if (err != ERR_0_OK) return err;
 
     if (++x >= SCREEN_COLS) {
-        return screen_txt_new_line(screen);
+        return screen_txt_new_line(machine, scroll);
     }
 
-    screen_set_txt_cursor(screen, y, x);
+    return screen_set_txt_cursor(machine, y, x);
+}
+ZxError screen_set_txt_cursor(ZxMachine machine, const uint8_t y, const uint8_t x) {
+    if (!machine) return ERR_UNKNOWN;
 
-    return false;
+    ZxError err;
+
+    err = machine_poke(machine, SYSVAR_S_POSN_ROW, 24 - y);
+    if (err != ERR_0_OK) return err;
+
+    return machine_poke(machine, SYSVAR_S_POSN_COL, 33 - x);
 }
-void screen_set_txt_cursor(ZxScreen screen, const uint8_t y, const uint8_t x) {
-    if (!screen) return;
-    screen[SYSVAR_S_POSN_ROW] = 24 - y;
-    screen[SYSVAR_S_POSN_COL] = 33 - x;
+ZxError screen_get_txt_cursor_x(ZxMachine machine, uint8_t *x) {
+    if (machine == NULL || x == NULL) return ERR_UNKNOWN;
+
+    ZxError err = machine_peek(machine, SYSVAR_S_POSN_COL, x);
+    if (err != ERR_0_OK) return err;
+
+    *x = 33 - *x;
+    return ERR_0_OK;
 }
-uint8_t screen_get_txt_cursor_x(ZxScreen screen) {
-    return 33 - screen[SYSVAR_S_POSN_COL];
-}
-uint8_t screen_get_txt_cursor_y(ZxScreen screen) {
-    return 24 - screen[SYSVAR_S_POSN_ROW];
+ZxError screen_get_txt_cursor_y(ZxMachine machine, uint8_t *y) {
+    if (machine == NULL || y == NULL) return ERR_UNKNOWN;
+
+    ZxError err = machine_peek(machine, SYSVAR_S_POSN_ROW, y);
+    if (err != ERR_0_OK) return err;
+
+    *y = 24 - *y;
+    return ERR_0_OK;
 }
 
 //Write and read sys
-void screen_clear_sys(ZxScreen screen) {
-    if (screen == NULL) return;
+ZxError screen_clear_sys(ZxMachine machine) {
+    if (machine == NULL) return ERR_UNKNOWN;
 
+    ZxError err;
     for (uint8_t y = MAIN_SCREEN_ROWS; y < MAIN_SCREEN_ROWS + 2; y++) {
         for (uint8_t x = 0; x < SCREEN_COLS; x++) {
+            for (uint8_t l = 0; l < SCAN_LINES; l++) {
+                uint16_t address = screen_get_pixel_address(x, y, l);
+                err = machine_poke(machine, address, 0x00);
+                if (err != ERR_0_OK) return err;
+            }
+
             int offset = y * SCREEN_COLS + x;
-            screen[VRAM_CHARS_START + offset] = ZX_CHAR_SPACE;
-            screen[VRAM_ATTRS_START + offset] = SYS_DEFAULT_ATTR;
+            err = machine_poke(machine, VRAM_ATTRS_START + offset, SYS_DEFAULT_ATTR);
+            if (err != ERR_0_OK) return err;
         }
     }
 
-    screen_set_sys_cursor(screen, 0, 0);
+    return screen_set_sys_cursor(machine, 0, 0);
 }
-void screen_put_sys_char(ZxScreen screen, const uint8_t character) {
-    if (screen == NULL) return;
+ZxError screen_put_sys_char_attr(ZxMachine machine, const uint8_t character, uint8_t attr) {
+    if (machine == NULL) return ERR_UNKNOWN;
 
-    uint8_t x = screen_get_sys_cursor_x(screen);
-    uint8_t y = screen_get_sys_cursor_y(screen);
+    ZxError err;
+    uint8_t x, y;
+    err = screen_get_sys_cursor_x(machine, &x);
+    if (err != ERR_0_OK) return err;
+    err = screen_get_sys_cursor_y(machine, &y);
+    if (err != ERR_0_OK) return err;
 
-    uint8_t physical_y = MAIN_SCREEN_ROWS + y; // Altijd netjes regel 22 of 23
+    uint8_t bitmap[8];
+    err = zx_get_character_bitmap(machine, character, bitmap);
+    if (err != ERR_0_OK) return err;
 
-    int offset = physical_y * SCREEN_COLS + x;
+    uint8_t physical_y = MAIN_SCREEN_ROWS + (y > 1 ? 1 : y); // Regel 22 of 23
 
-    screen[VRAM_CHARS_START + offset] = character;
-    screen[VRAM_ATTRS_START + offset] = SYS_DEFAULT_ATTR;
+    // 1. Schrijf pixels naar VRAM
+    for (uint8_t scanline = 0; scanline < SCAN_LINES; scanline++) {
+        uint16_t pixel_addr = screen_get_pixel_address(x, physical_y, scanline);
+        err = machine_poke(machine, pixel_addr, bitmap[scanline]);
+        if (err != ERR_0_OK) return err;
+    }
 
-    // Optioneel: sys cursor opschuiven
+    // 2. Schrijf attribuut met physical_y (voorkomt overschrijven van regel 0/1!)
+    const int offset = (physical_y * SCREEN_COLS) + x;
+    uint16_t attr_addr = VRAM_ATTRS_START + (uint16_t)offset;
+    err = machine_poke(machine, attr_addr, attr);
+    if (err != ERR_0_OK) return err;
+
+    // 3. Cursor opschuiven
     x++;
     if (x >= SCREEN_COLS) {
         x = 0;
-        y = (y == 0) ? 1 : 0;
+        if (y == 0) {
+            y = 1; // Ga van regel 22 door naar regel 23
+        } else {
+            // We staan al op regel 23: schuif regel 23 omhoog naar 22!
+            err = screen_sys_scroll_up(machine);
+            if (err != ERR_0_OK) return err;
+            y = 1;
+        }
     }
-    screen_set_sys_cursor(screen, y, x);
+    return screen_set_sys_cursor(machine, y, x);
 }
-void screen_set_sys_cursor(ZxScreen screen, const uint8_t rel_y, const uint8_t x) {
-    if (!screen) return;
+ZxError screen_put_sys_char(ZxMachine machine, const uint8_t character) {
+    return screen_put_sys_char_attr(machine, character, SYS_DEFAULT_ATTR);
+}
+ZxError screen_set_sys_cursor(ZxMachine machine, const uint8_t rel_y, const uint8_t x) {
+    if (!machine) return ERR_UNKNOWN;
+
+    ZxError err;
+
     uint8_t physical_y = 22 + (rel_y > 1 ? 1 : rel_y);
-    screen[SYSVAR_S_POSNL_ROW] = 24 - physical_y;
-    screen[SYSVAR_S_POSNL_COL] = 33 - x;
+
+    err = machine_poke(machine, SYSVAR_S_POSNL_ROW, 24 - physical_y);
+    if (err != ERR_0_OK) return err;
+
+    return machine_poke(machine, SYSVAR_S_POSNL_COL, 33 - x);
 }
-uint8_t screen_get_sys_cursor_x(ZxScreen screen) {
-    return 33 - screen[SYSVAR_S_POSNL_COL];
+ZxError screen_get_sys_cursor_x(ZxMachine machine, uint8_t *x) {
+    if (machine == NULL || x == NULL) return ERR_UNKNOWN;
+
+    ZxError err = machine_peek(machine, SYSVAR_S_POSNL_COL, x);
+    if (err != ERR_0_OK) return err;
+
+    *x = 33 - *x;
+    return ERR_0_OK;
 }
-uint8_t screen_get_sys_cursor_y(ZxScreen screen) {
-    uint8_t physical_y = 24 - screen[SYSVAR_S_POSNL_ROW];
-    return (physical_y >= 22) ? (physical_y - 22) : 0;
+ZxError screen_get_sys_cursor_y(ZxMachine machine, uint8_t *y) {
+    if (machine == NULL || y == NULL) return ERR_UNKNOWN;
+
+    uint8_t y_raw;
+    ZxError err = machine_peek(machine, SYSVAR_S_POSNL_ROW, &y_raw);
+    if (err != ERR_0_OK) return err;
+
+    uint8_t physical_y = 24 - y_raw;
+    *y = (physical_y >= 22) ? (physical_y - 22) : 0;
+    return ERR_0_OK;
 }
 
 //character getters
-uint8_t screen_get_char(ZxScreen screen, const int y, const int x) {
-    if (screen == NULL || y < 0 || y >= TOTAL_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
-        return ZX_CHAR_SPACE;
+ZxError screen_get_char(ZxMachine machine, const int y, const int x, uint8_t *character) {
+    if (machine == NULL || character == NULL) return ERR_UNKNOWN;
+
+    if (y < 0 || y >= TOTAL_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
+        return ERR_B_INTEGER_OUT_OF_RANGE;
     }
-    return screen[VRAM_CHARS_START + (y * SCREEN_COLS) + x];
+
+    //retrieve bitmap
+    uint8_t bitmap[8];
+
+    for (int i = 0; i < SCAN_LINES; i++) {
+        const uint16_t address = screen_get_pixel_address(x, y, i);
+        const ZxError err = machine_peek(machine, address, &bitmap[i]);
+        if (err != ERR_0_OK) return err;
+    }
+
+    return zx_recognize_character(machine, bitmap, character);
 }
 
-uint8_t screen_get_attr(ZxScreen screen, const int y, const int x) {
-    if (screen == NULL || y < 0 || y >= TOTAL_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
-        return SYS_DEFAULT_ATTR;
-    }
-    return screen[VRAM_ATTRS_START + (y * SCREEN_COLS) + x];
-}
-const uint8_t* screen_get_chars_buffer(ZxScreen screen) {
-    if (screen == NULL) return NULL;
-    return &screen[VRAM_CHARS_START];
-}
+ZxError screen_get_attr(ZxMachine machine, const int y, const int x, uint8_t *attributes) {
+    if (machine == NULL || attributes == NULL) return ERR_UNKNOWN;
 
-const uint8_t* screen_get_attrs_buffer(ZxScreen screen) {
-    if (screen == NULL) return NULL;
-    return &screen[VRAM_ATTRS_START];
+    if (y < 0 || y >= TOTAL_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
+        return ERR_B_INTEGER_OUT_OF_RANGE;
+    }
+
+    const uint16_t offset = (y * SCREEN_COLS) + x;
+    const uint16_t address = VRAM_ATTRS_START + offset;
+    return machine_peek(machine, address, attributes);
+}
+uint32_t* screen_get_framebuffer(void) {
+    return rgba_framebuffer;
+}
+void screen_render_frame(ZxMachine machine, const bool flash_state) {
+    for (uint8_t row = 0; row < TOTAL_SCREEN_ROWS; row++) {
+        for (uint8_t col = 0; col < SCREEN_COLS; col++) {
+            // 1. Attribuut ophalen
+            const uint16_t attr_addr = VRAM_ATTRS_START + (row * SCREEN_COLS) + col;
+            uint8_t attr = 0;
+            machine_peek(machine, attr_addr, &attr);
+
+            uint8_t ink   = attr & 0x07;
+            uint8_t paper = (attr >> 3) & 0x07;
+            const uint8_t bright = (attr & 0x40) ? 8 : 0;
+            const bool flash    = (attr & 0x80) != 0;
+
+            if (flash && flash_state) {
+                // Wissel ink en paper om tijdens de actieve flash-fase
+                const uint8_t tmp = ink;
+                ink = paper;
+                paper = tmp;
+            }
+
+            const uint32_t color_ink   = ZX_PALETTE[ink + bright];
+            const uint32_t color_paper = ZX_PALETTE[paper + bright];
+
+            // 2. Scanlines 0..7 van dit karakter renderen
+            for (uint8_t line = 0; line < SCAN_LINES; line++) {
+                uint16_t pixel_addr = screen_get_pixel_address(col, row, line);
+                uint8_t pixels = 0;
+                machine_peek(machine, pixel_addr, &pixels);
+
+                // Lineaire index in de framebuffer:
+                const uint32_t fb_y = (row * 8) + line;
+                uint32_t fb_idx = (fb_y * SCREEN_WIDTH) + (col * 8);
+
+                // 8 pixels wegschrijven (MSB links, LSB rechts)
+                for (int b = 7; b >= 0; b--) {
+                    rgba_framebuffer[fb_idx++] = (pixels & (1 << b)) ? color_ink : color_paper;
+                }
+            }
+        }
+    }
 }

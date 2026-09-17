@@ -594,6 +594,141 @@ static ZxError execute_cmd_pause(ZxMachine machine, const uint8_t *cmd, size_t o
     machine_set_pause_start_frame(machine, machine_get_frames(machine));
     return ERR_0_OK;
 }
+static ZxError execute_cmd_plot(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
+    ZxError err = screen_reset_temp_attrs(machine);
+    if (err != ERR_0_OK) return err;
+
+    if (output_size <= 1) return ERR_C_NONSENSE_IN_BASIC;
+
+    size_t cursor = 1;
+
+    while (cursor < output_size) {
+        while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+        if (cursor >= output_size) break;
+
+        const uint8_t token = cmd[cursor];
+
+        if (!is_zx_print_modifier(token)) break;
+
+        uint8_t modifier;
+        double mod_value;
+        size_t bytes_read = 0;
+        err = parse_print_modifiers(machine, cmd + cursor, output_size - cursor, &modifier, &mod_value, &bytes_read);
+        if (err != ERR_0_OK) return err;
+
+        cursor += bytes_read;
+
+        if (modifier == ZX_TOKEN_TAB) return ERR_C_NONSENSE_IN_BASIC;
+        if (modifier == ZX_STATEMENT_INK) {
+            if (mod_value < 0 || mod_value > 8) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            err = screen_set_ink(machine, (uint8_t) mod_value, false);
+            if (err != ERR_0_OK) return err;
+            continue;
+        }
+        if (modifier == ZX_STATEMENT_PAPER) {
+            if (mod_value < 0 || mod_value > 8) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            err = screen_set_paper(machine, (uint8_t) mod_value, false);
+            if (err != ERR_0_OK) return err;
+            continue;
+        }
+        if (modifier == ZX_STATEMENT_FLASH) {
+            if (mod_value != 0 && mod_value != 1 && mod_value != 8) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            err = screen_set_flash(machine, (uint8_t) mod_value, false);
+            if (err != ERR_0_OK) return err;
+            continue;
+        }
+        if (modifier == ZX_STATEMENT_BRIGHT) {
+            if (mod_value != 0 && mod_value != 1 && mod_value != 8) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            err = screen_set_bright(machine, (uint8_t) mod_value, false);
+            if (err != ERR_0_OK) return err;
+            continue;
+        }
+        if (modifier == ZX_STATEMENT_INVERSE) {
+            if (mod_value < 0 || mod_value > 1) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            err = screen_set_inverse(machine, (uint8_t) mod_value, false);
+            if (err != ERR_0_OK) return err;
+            continue;
+        }
+        if (modifier == ZX_STATEMENT_OVER) {
+            if (mod_value < 0 || mod_value > 1) {
+                return ERR_B_INTEGER_OUT_OF_RANGE;
+            }
+
+            err = screen_set_over(machine, (uint8_t) mod_value, false);
+            if (err != ERR_0_OK) return err;
+            continue;
+        }
+        while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+        if (cursor >= output_size) break;
+
+        if (cmd[cursor] != ZX_CHAR_SEMICOLON) return ERR_C_NONSENSE_IN_BASIC;
+        cursor++;
+    }
+
+    ZxValue x_val;
+    zx_init_value(&x_val);
+    size_t bytes_read = 0;
+    err = solve_expression(machine, cmd + cursor, output_size - cursor, &x_val, &bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&x_val);
+        return err;
+    }
+    cursor += bytes_read;
+    double x_dbl;
+    err = zx_get_number(x_val, &x_dbl);
+    if (err != ERR_0_OK) {
+        zx_free_string(&x_val);
+        return err;
+    }
+    zx_free_string(&x_val);
+    if (x_dbl < 0 || x_dbl > 255) return ERR_B_INTEGER_OUT_OF_RANGE;
+    uint8_t x = (uint8_t) x_dbl;
+
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+    if (cursor >= output_size || cmd[cursor] != ZX_CHAR_COMMA) return ERR_C_NONSENSE_IN_BASIC;
+    cursor++;
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+    if (cursor >= output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+    ZxValue y_val;
+    zx_init_value(&y_val);
+    bytes_read = 0;
+    err = solve_expression(machine, cmd + cursor, output_size - cursor, &y_val, &bytes_read);
+    if (err != ERR_0_OK) {
+        zx_free_string(&y_val);
+        return err;
+    }
+    cursor += bytes_read;
+    double y_dbl;
+    err = zx_get_number(y_val, &y_dbl);
+    if (err != ERR_0_OK) {
+        zx_free_string(&y_val);
+        return err;
+    }
+    zx_free_string(&y_val);
+    if (y_dbl < 0 || y_dbl > 255) return ERR_B_INTEGER_OUT_OF_RANGE;
+    uint8_t y = (uint8_t) y_dbl;
+
+    while (cursor < output_size && is_zx_space(cmd[cursor])) { cursor++; }
+    if (cursor < output_size) return ERR_C_NONSENSE_IN_BASIC;
+
+    return screen_plot(machine, x, y);
+}
 static ZxError execute_cmd_poke(ZxMachine machine, const uint8_t *cmd, size_t output_size) {
     if (output_size <=1) return ERR_C_NONSENSE_IN_BASIC;
 
@@ -1055,6 +1190,8 @@ ZxError execute(ZxMachine machine, const uint8_t *input, const size_t input_size
             return execute_cmd_new(machine);
         case ZX_STATEMENT_PAUSE:
             return execute_cmd_pause(machine, input, input_size);
+        case ZX_STATEMENT_PLOT:
+            return execute_cmd_plot(machine, input, input_size);
         case ZX_STATEMENT_POKE:
             return execute_cmd_poke(machine, input, input_size);
         case ZX_STATEMENT_PRINT:

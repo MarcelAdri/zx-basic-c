@@ -27,6 +27,8 @@
 #define SYSVAR_S_POSNL_COL  23682  // 33 - (x + 1) (sys)
 #define SYSVAR_S_POSNL_ROW  23683  // 24 - y (sys)
 #define SYSVAR_DF_SZ       23659 //hoogte sys-vak
+#define SYSVAR_COORDS_X    23677 //coordinaten laatste plot
+#define SYSVAR_COORDS_Y    23678 //coordinaten laatste plot
 
 #define ATTR_FLASH_MASK 0x80 // 1000 0000
 #define ATTR_BRIGHT_MASK 0X40 // 0100 0000
@@ -40,6 +42,7 @@
 
 #define SCREEN_WIDTH  (SCREEN_COLS * 8)
 #define SCREEN_HEIGHT (TOTAL_SCREEN_ROWS * 8)
+#define MAIN_SCREEN_HEIGHT (MAIN_SCREEN_ROWS * 8)
 
 static const uint32_t ZX_PALETTE[16] = {
     // Normaal (BRIGHT 0) - formaat 0xAABBGGRR voor Little-Endian Canvas
@@ -118,6 +121,32 @@ static uint16_t screen_get_pixel_address(uint8_t col, uint8_t row, uint8_t scanl
     uint16_t c = col;         // 0 t/m 31 (kolom)
 
     return VRAM_PIXELS_START | (t << 11) | (s << 8) | (r << 5) | c;
+}
+static uint16_t screen_get_pixel_address_plot(const uint8_t x, const uint8_t y) {
+    if (y > MAIN_SCREEN_HEIGHT) return 0;
+    uint8_t col = x / SCAN_LINES;
+    uint8_t screen_y = (MAIN_SCREEN_HEIGHT - 1) - y;
+    uint8_t row = screen_y / SCAN_LINES;
+    uint8_t scanline = screen_y % SCAN_LINES;
+    return screen_get_pixel_address(col, row, scanline);
+}
+static int screen_get_offset_pixel(const uint8_t x, const uint8_t y) {
+    if (y > MAIN_SCREEN_HEIGHT) return ERR_B_INTEGER_OUT_OF_RANGE;
+
+    uint8_t col = x / SCAN_LINES;
+    uint8_t screen_y = (MAIN_SCREEN_HEIGHT - 1) - y;
+    uint8_t row = screen_y / SCAN_LINES;
+
+    return (row * SCREEN_COLS) + col;
+}
+static ZxError screen_get_attributes_pixel(ZxMachine machine,
+    const uint8_t x,
+    const uint8_t y,
+    uint8_t *attr_byte) {
+
+    const int offset = screen_get_offset_pixel(x, y);
+
+    return machine_peek(machine, VRAM_ATTRS_START + (uint16_t)offset, attr_byte);
 }
 static ZxError screen_sys_scroll_up(ZxMachine machine) {
     ZxError err;
@@ -746,7 +775,7 @@ ZxError screen_get_char(ZxMachine machine, const int y, const int x, uint8_t *ch
 ZxError screen_get_attr(ZxMachine machine, const int y, const int x, uint8_t *attributes) {
     if (machine == NULL || attributes == NULL) return ERR_UNKNOWN;
 
-    if (y < 0 || y >= TOTAL_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
+    if (y < 0 || y >= MAIN_SCREEN_ROWS || x < 0 || x >= SCREEN_COLS) {
         return ERR_B_INTEGER_OUT_OF_RANGE;
     }
 
@@ -797,4 +826,63 @@ void screen_render_frame(ZxMachine machine, const bool flash_state) {
             }
         }
     }
+}
+ZxError screen_plot(ZxMachine machine, const uint8_t x, const uint8_t y) {
+    if (machine == NULL) return ERR_UNKNOWN;
+
+    uint16_t address = screen_get_pixel_address_plot(x, y);
+    if (address == 0) return ERR_B_INTEGER_OUT_OF_RANGE;
+
+    uint8_t existing_scan_line;
+    ZxError err = machine_peek(machine, address, &existing_scan_line);
+    if (err != ERR_0_OK) return err;
+
+    uint8_t bit_mask = 0x80 >> (x & 7);
+
+    uint8_t p_flag;
+    err = machine_peek(machine, SYSVAR_P_FLAG, &p_flag);
+    if (err != ERR_0_OK) return err;
+
+    bool over = (p_flag & ATTR_T_OVER_MASK) != 0;
+    bool inverse = (p_flag & ATTR_T_INV_MASK) != 0;
+
+    uint8_t target_scan_line;
+    if (!over && !inverse) {
+        target_scan_line = existing_scan_line | bit_mask;
+    } else if (over && !inverse) {
+        target_scan_line = existing_scan_line ^ bit_mask;
+    } else if (!over && inverse){
+        target_scan_line = existing_scan_line & ~bit_mask;
+    }
+    else {
+        target_scan_line = existing_scan_line;
+    }
+
+    if (!over) {
+        int offset = screen_get_offset_pixel(x, y);
+        uint16_t attr_addr = VRAM_ATTRS_START + (uint16_t)offset;
+        uint8_t cur_attr = 0;
+        err = machine_peek(machine, attr_addr, &cur_attr);
+        if (err != ERR_0_OK) return err;
+
+        uint8_t mask = 0;
+        err = machine_peek(machine, SYSVAR_MASK_T, &mask);
+        if (err != ERR_0_OK) return err;
+
+        uint8_t attr = 0;
+        err = machine_peek(machine, SYSVAR_ATTR_T, &attr);
+        if (err != ERR_0_OK) return err;
+
+        uint8_t final_attr = (cur_attr & mask) | (attr & ~mask);
+        err = machine_poke(machine, attr_addr, final_attr);
+        if (err != ERR_0_OK) return err;
+    }
+
+    err = machine_poke(machine, SYSVAR_COORDS_X, x);
+    if (err != ERR_0_OK) return err;
+
+    err =  machine_poke(machine, SYSVAR_COORDS_Y, y);
+    if (err != ERR_0_OK) return err;
+
+    return machine_poke(machine, address, target_scan_line);
 }

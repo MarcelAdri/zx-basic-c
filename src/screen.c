@@ -878,11 +878,28 @@ ZxError screen_plot(ZxMachine machine, const uint8_t x, const uint8_t y) {
         if (err != ERR_0_OK) return err;
     }
 
-    err = machine_poke(machine, SYSVAR_COORDS_X, x);
-    if (err != ERR_0_OK) return err;
-
-    err =  machine_poke(machine, SYSVAR_COORDS_Y, y);
+    err = screen_set_pixel_cursor(machine, x, y);
     if (err != ERR_0_OK) return err;
 
     return machine_poke(machine, address, target_scan_line);
+}
+ZxError screen_set_pixel_cursor(ZxMachine machine, const uint8_t x, const uint8_t y) {
+    if (!machine) return ERR_UNKNOWN;
+
+    ZxError err;
+
+    err = machine_poke(machine, SYSVAR_COORDS_X , x);
+    if (err != ERR_0_OK) return err;
+
+    return machine_poke(machine, SYSVAR_COORDS_Y, y);
+}
+ZxError screen_get_pixel_cursor_x(ZxMachine machine, uint8_t *x) {
+    if (machine == NULL || x == NULL) return ERR_UNKNOWN;
+
+    return machine_peek(machine, SYSVAR_COORDS_X, x);
+}
+ZxError screen_get_pixel_cursor_y(ZxMachine machine, uint8_t *y) {
+    if (machine == NULL || y == NULL) return ERR_UNKNOWN;
+
+    return machine_peek(machine, SYSVAR_COORDS_Y, y);
 }

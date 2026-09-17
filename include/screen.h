@@ -43,5 +43,8 @@ ZxError screen_get_attr(ZxMachine machine, int y, int x, uint8_t *attributes);
 uint32_t* screen_get_framebuffer(void);
 void screen_render_frame(ZxMachine machine, bool flash_state);
 ZxError screen_plot(ZxMachine machine, uint8_t x, uint8_t y);
+ZxError screen_set_pixel_cursor(ZxMachine machine, const uint8_t x, const uint8_t y);
+ZxError screen_get_pixel_cursor_x(ZxMachine machine, uint8_t *x);
+ZxError screen_get_pixel_cursor_y(ZxMachine machine, uint8_t *y);
 
 #endif //ZX_BASIC_C_SCREEN_H
